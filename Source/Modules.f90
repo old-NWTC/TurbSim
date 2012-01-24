@@ -112,6 +112,7 @@ INTEGER                      :: NumSteps                                 ! Numbe
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
 INTEGER                      :: RandSeed   (3)                           ! The array that holds the random seeds.
+INTEGER,    ALLOCATABLE      :: RandSeedAry(:)                           ! The array that holds the random seeds.
 INTEGER                      :: RandSeedTmp                              ! Holds the input random seed for the SNLWIND-3D RNG
 INTEGER                      :: ScaleIEC                                 ! Flag to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
 INTEGER,    PARAMETER        :: UACT     = 14                            ! I/O unit for AeroDyn coherent turbulence
@@ -143,6 +144,7 @@ LOGICAL                      :: ExtraTwrPT                               ! Flag 
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
 LOGICAL                      :: NumTurbInp                               ! Flag to indicate if turbulence is user-specified (as opposed to IEC standard A, B, or C)
+LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
 LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
 LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used

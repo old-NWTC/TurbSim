@@ -208,7 +208,7 @@ CONTAINS
         ! Make sure the array isn't too small
       
       IF ( SIZE(TRH) < N )  &
-          CALL Abort( 'Error in call to sine transform.  Array size is not large enough.' )
+          CALL ProgAbort( 'Error in call to sine transform.  Array size is not large enough.' )
 
         ! Make sure that the value at the zeroeth and largest positive
         ! frequency are zero, else abort.
