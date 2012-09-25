@@ -50,10 +50,16 @@ REAL(ReKi)                   :: SigmaIEC                                 ! IEC s
 REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
 REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
 REAL(ReKi)                   :: TimeStep                                 ! Time step.
+REAL(ReKi)                   :: Sigma_U2                                 ! Standard Deviation of U velocity, squared.
+REAL(ReKi)                   :: Sigma_V2                                 ! Standard Deviation of V velocity, squared.
+REAL(ReKi)                   :: Sigma_W2                                 ! Standard Deviation of W velocity, squared.
+REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
 REAL(ReKi), PARAMETER        :: Tolerance = 0.0001                       ! The largest difference between two numbers that are assumed to be equal
 REAL(ReKi), ALLOCATABLE      :: TRH        (:)                           ! The transfer function  matrix (NumSteps).
 REAL(ReKi)                   :: TsclFact                                 ! Scale factor for time (h/U0) in coherent turbulence events
 REAL(ReKi), ALLOCATABLE      :: U          (:)                           ! The steady u-component wind speeds for the grid (ZLim).
+REAL(ReKi)                   :: H_ref                                    ! Height for reference wind speed.
+REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
 REAL(ReKi), ALLOCATABLE      :: U_USR      (:)                           ! User-specified total wind speed, varying with height
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
