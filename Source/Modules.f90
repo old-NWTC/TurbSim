@@ -150,6 +150,7 @@ LOGICAL                      :: ExtraTwrPT                               ! Flag 
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
 LOGICAL                      :: NumTurbInp                               ! Flag to indicate if turbulence is user-specified (as opposed to IEC standard A, B, or C)
+LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
 LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
 LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
