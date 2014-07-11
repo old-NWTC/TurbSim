@@ -70,6 +70,7 @@ REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A pro
 REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
 REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
+REAL(ReKi)                   :: U_Ref                                    ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
 REAL(ReKi), ALLOCATABLE      :: V          (:,:,:)                       ! An array containing the summations of the rows of H (NumSteps,NTot,3).
 REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
 REAL(ReKi)                   :: Vave                                     ! The IEC Vave for ETM
@@ -92,7 +93,9 @@ REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A pro
 REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
 REAL(ReKi)                   :: Zm_max                                   ! The nondimensional vertical height of the coherent turbulence dataset
 
-
+!REAL(ReKi)                   :: RefHt                                    ! Reference height. ADDED BY Y.G.
+!REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
+ REAL(ReKi)                   :: U0_1HR
 
 INTEGER,    ALLOCATABLE      :: EventName  (:)                           ! The timestep where the event starts, which determines the name of the event file
 INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
@@ -101,6 +104,7 @@ INTEGER                      :: IECstandard                              ! The s
 INTEGER,    PARAMETER        :: IEC_ETM        = 1                       ! Number to indicate the IEC Normal Turbulence Model
 INTEGER,    PARAMETER        :: IEC_EWM1       = 2                       ! Number to indicate the IEC Extreme Wind speed Model (50-year)
 INTEGER,    PARAMETER        :: IEC_EWM50      = 3                       ! Number to indicate the IEC Extreme Wind speed Model ( 1-year)
+INTEGER,    PARAMETER        :: IEC_EWM100     = 5                       ! Number to indicate the IEC Extreme Wind speed Model ( 100-year)
 INTEGER,    PARAMETER        :: IEC_NTM        = 4                       ! Number to indicate the IEC Extreme Turbulence Model
 INTEGER                      :: IEC_WindType                             ! Number to indicate the IEC wind type
 INTEGER,    ALLOCATABLE      :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
@@ -203,14 +207,14 @@ SUBROUTINE get_coefs(JetHt,UH_coef,WD_coef)
 
       ! This subroutine just returns the coefficients that Neil calculated
       ! for getting the Chebyshev coefficients for jet wind profiles.
-      
+
       ! The coefficients are
       ! Row 1 = Jet maximum wind speed coefficient
       ! Row 2 = Turbine layer Richardson number coefficient
       ! Row 3 = uStar over the rotor diameter coefficient
       ! Row 4 = constant coefficient
       ! Columns 1:11 = coefficients for 0-10th Chebyshev Basis Functions
-      
+
 
    REAL(ReKi),INTENT(IN)     :: JetHt                                    ! The height of the jet
    REAL(ReKi),INTENT(OUT)    :: UH_coef(4,11)                            ! The coefficients for horizontal wind speed
