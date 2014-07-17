@@ -1,10 +1,51 @@
 !=======================================================================
+MODULE TurbSim_Types
+
+use NWTC_Library
+
+   INTEGER(IntKi), PARAMETER :: SpecModel_NONE   =  0  ! No turbulence
+   INTEGER(IntKi), PARAMETER :: SpecModel_IECKAI =  1  ! IEC Kaimal
+   INTEGER(IntKi), PARAMETER :: SpecModel_IECVKM =  2  ! IEC von Karman 
+   INTEGER(IntKi), PARAMETER :: SpecModel_GP_LLJ =  3  ! Great Plains Low-Level Jet
+   INTEGER(IntKi), PARAMETER :: SpecModel_NWTCUP =  4  ! NWTC (upwind)
+   INTEGER(IntKi), PARAMETER :: SpecModel_SMOOTH =  5  ! Risoe Smooth-Terrain   
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_UPW =  6  ! Wind Farm Upwind
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_07D =  7  ! Wind Farm  7 rotor diameters downwind
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_14D =  8  ! Wind Farm 14 rotor diameters downwind
+
+   INTEGER(IntKi), PARAMETER :: SpecModel_TIDAL  =  9  ! Tidal (Hydro)
+   INTEGER(IntKi), PARAMETER :: SpecModel_API    = 10  ! API
+   INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 11  ! User-defined spectra from file
+   
+   
+   type :: RandNum_ParameterType
+   
+      integer(IntKi)                  :: pRNG
+      INTEGER(IntKi)                  :: RandSeed   (3)                           ! The array that holds the initial random seeds for the 3 components.
+      INTEGER(IntKi),    ALLOCATABLE  :: RandSeedAry(:)                           ! The array that holds the random seeds.
+            
+   end type !RandNum_ParameterType
+
+   type :: RandNum_OtherStateType
+      INTEGER(IntKi), ALLOCATABLE     :: NextSeed   (:)                           ! The array that holds the next random seed for the 3 components.            
+   end type !RandNum_OtherStateType
+
+   
+   
+   
+   
+END MODULE TurbSim_Types
+   
 MODULE TSMods
 
 USE                             NWTC_Library
 
+use TurbSim_Types
+
 IMPLICIT                        NONE
 SAVE
+type(RandNum_ParameterType)  :: p_RandNum                   ! parameters for random numbers
+type(RandNum_OtherStateType) :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
 
 REAL(ReKi)                   :: AnalysisTime                             ! Analysis Time. (amount of time for analysis, allows user to perform analysis using one time length, but output UsableTime
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
@@ -41,7 +82,7 @@ REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array
 REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
 REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
 REAL(ReKi), PARAMETER        :: profileZmin =  50.                       ! Lower height limit for extrapolating GP_LLJ profiles of ustar and zl
-REAL(ReKi), ALLOCATABLE      :: RandNum    (:)                           ! The array that holds the random numbers.
+REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                           ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
 REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
 REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
 REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NTot,3).
@@ -108,7 +149,6 @@ INTEGER,    PARAMETER        :: IEC_EWM100     = 5                       ! Numbe
 INTEGER,    PARAMETER        :: IEC_NTM        = 4                       ! Number to indicate the IEC Extreme Turbulence Model
 INTEGER                      :: IEC_WindType                             ! Number to indicate the IEC wind type
 INTEGER,    ALLOCATABLE      :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
-INTEGER                      :: LuxLevel   = 3                           ! Luxury Level for RanLux RNG
 INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
 INTEGER                      :: NTot                                     ! Number of points in grid, plus the hub center.
 INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
@@ -121,9 +161,6 @@ INTEGER                      :: NumOutSteps                              ! Numbe
 INTEGER                      :: NumSteps                                 ! Number of time steps for the FFT.
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
-INTEGER                      :: RandSeed   (3)                           ! The array that holds the random seeds.
-INTEGER,    ALLOCATABLE      :: RandSeedAry(:)                           ! The array that holds the random seeds.
-INTEGER                      :: RandSeedTmp                              ! Holds the input random seed for the SNLWIND-3D RNG
 INTEGER                      :: ScaleIEC                                 ! Flag to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
 INTEGER,    PARAMETER        :: UACT     = 14                            ! I/O unit for AeroDyn coherent turbulence
 INTEGER,    PARAMETER        :: UACTTS   = 15                            ! I/O unit for coherent turbulence time step history file

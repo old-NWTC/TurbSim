@@ -13,7 +13,7 @@ USE               NWTC_Library, ONLY : ProgVer
 IMPLICIT          NONE
 
 ProgName = 'TurbSim'                     ! The name of this program.
-ProgVer  = ' (v1.08.00c-bjj, 10-Jul-2014)'
+ProgVer  = ' (v2.00.00a-bjj, 15-Jul-2014)'
 !BJJ: make sure that DEBUG_OUT and PSD_OUT and COH_OUT are .FALSE.
 
 RETURN
