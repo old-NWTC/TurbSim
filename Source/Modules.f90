@@ -12,10 +12,12 @@ use NWTC_Library
    INTEGER(IntKi), PARAMETER :: SpecModel_WF_UPW =  6  ! Wind Farm Upwind
    INTEGER(IntKi), PARAMETER :: SpecModel_WF_07D =  7  ! Wind Farm  7 rotor diameters downwind
    INTEGER(IntKi), PARAMETER :: SpecModel_WF_14D =  8  ! Wind Farm 14 rotor diameters downwind
-
    INTEGER(IntKi), PARAMETER :: SpecModel_TIDAL  =  9  ! Tidal (Hydro)
-   INTEGER(IntKi), PARAMETER :: SpecModel_API    = 10  ! API
-   INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 11  ! User-defined spectra from file
+   INTEGER(IntKi), PARAMETER :: SpecModel_RIVER  = 10  ! River (Hydro)
+   INTEGER(IntKi), PARAMETER :: SpecModel_API    = 11  ! API
+   INTEGER(IntKi), PARAMETER :: SpecModel_MODVKM = 12  ! user-specified scaling in von Karman model
+   INTEGER(IntKi), PARAMETER :: SpecModel_USRVKM = 13  ! user-specified scaling in von Karman model
+   INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 14  ! User-defined spectra from file
    
    
    type :: RandNum_ParameterType
@@ -162,6 +164,7 @@ INTEGER                      :: NumSteps                                 ! Numbe
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
 INTEGER                      :: ScaleIEC                                 ! Flag to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
+INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
 INTEGER,    PARAMETER        :: UACT     = 14                            ! I/O unit for AeroDyn coherent turbulence
 INTEGER,    PARAMETER        :: UACTTS   = 15                            ! I/O unit for coherent turbulence time step history file
 INTEGER,    PARAMETER        :: UAFFW    = 9                             ! I/O unit for AeroDyn FF data (*.bts file).
