@@ -3,6 +3,8 @@ MODULE TurbSim_Types
 
 use NWTC_Library
 
+   INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
+
    INTEGER(IntKi), PARAMETER :: SpecModel_NONE   =  0  ! No turbulence
    INTEGER(IntKi), PARAMETER :: SpecModel_IECKAI =  1  ! IEC Kaimal
    INTEGER(IntKi), PARAMETER :: SpecModel_IECVKM =  2  ! IEC von Karman 
@@ -204,7 +206,6 @@ INTEGER                      :: IEC_WindType                             ! Numbe
 INTEGER,    ALLOCATABLE      :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
 INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
 INTEGER                      :: NTot                                     ! Number of points in grid, plus the hub center.
-INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
 INTEGER                      :: NumCTt                                   ! Number of data points in the output coherent event timestep file
 INTEGER                      :: NumEvents                                ! Number of events in the event data file
 INTEGER                      :: NumFreq                                  ! Number of frequencies (=NumSteps/2).
@@ -239,9 +240,6 @@ LOGICAL                      :: WrBLFF                                   ! Flag 
 LOGICAL                      :: WrFHHTP                                  ! Flag to output formatted HH turbulence parameters.
 LOGICAL                      :: WrFmtFF                                  ! Flag to output formatted FF data (Traditional SNLWIND-3D format).
 
-CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
-CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
-CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
 CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
 CHARACTER(200)               :: FormStr                                  ! String used to store format specifiers.
 CHARACTER(200)               :: FormStr1                                 ! String used to store format specifiers.
@@ -274,9 +272,21 @@ TYPE     :: CohStr_ParameterType
    REAL(ReKi)              ::  Uwave                           ! Wind speed at center of the k-h wave 
    REAL(ReKi)              ::  Wsig                            ! Standard deviation of the w-component wind speed
    
+   CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
+   CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
+   CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
+   
 END TYPE CohStr_ParameterType
 
+TYPE :: CohStr_OutputType
+   REAL(ReKi)                   :: lambda              ! The expected value of interarrival times for the Poisson process
+   INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
+   REAL(ReKi)                   :: ExpectedTime        ! Amount of time the coherent structures should take
+   REAL(ReKi)                   :: EventTimeSum = 0.0  ! Amount of time the coherent structure takes
+END TYPE CohStr_OutputType
+
 TYPE(CohStr_ParameterType)   :: p_CohStr
+TYPE(CohStr_OutputType)      :: y_CohStr
 
 END MODULE TSMods
 !=======================================================================
