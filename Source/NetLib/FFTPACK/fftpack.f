@@ -163,7 +163,7 @@ C
          USE PRECISION
       REAL(ReKi), DIMENSION(*) :: IFAC
       DIMENSION       CH(*)      ,C(*)       ,WA(*)
-!bjj End     
+!bjj End
       NF = IFAC(2)
       NA = 0
       L1 = 1
@@ -1293,7 +1293,7 @@ C
          USE PRECISION
       REAL(ReKi), DIMENSION(*) :: IFAC
       DIMENSION WAR(*),WAS(*),X(*),XH(*)
-!bjj End      
+!bjj End
       DATA SQRT3 /1.73205080756888/
       DO 100 I=1,N
       XH(I) = WAR(I)
