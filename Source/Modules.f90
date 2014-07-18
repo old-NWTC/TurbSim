@@ -2,6 +2,7 @@
 MODULE TurbSim_Types
 
 use NWTC_Library
+use FFT_Module, only: FFT_DataType
 
    INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
 
@@ -46,8 +47,7 @@ use NWTC_Library
       
       
    end type TurbSim_GridParameterType
-   
-   
+      
 END MODULE TurbSim_Types
    
 MODULE TSMods
@@ -61,7 +61,7 @@ SAVE
 type(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
 type(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim
 type(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
-
+type(FFT_DataType)               :: FFT_Data
 
 REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
 REAL(ReKi), PARAMETER        :: profileZmin =  50.                       ! Lower height limit for extrapolating GP_LLJ profiles of ustar and zl
@@ -123,7 +123,6 @@ REAL(ReKi)                   :: CTLz                                     ! Fract
 REAL(ReKi)                   :: CTStartTime                              ! Minimum time to add coherent structures
 REAL(ReKi)                   :: DistScl                                  ! Disturbance scale for AeroDyn coherent turbulence events
 REAL(ReKi)                   :: ETMc                                     ! The c parameter in IEC ETM, 61400-1, Ed 3. Section 6.3.2.3, Eq. 19.  Variable per last sentence in section 7.4.1
-REAL(ReKi), ALLOCATABLE      :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
 REAL(ReKi)                   :: EventTimeStep                            ! The average length of timesteps in output events
 REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
 REAL(ReKi), ALLOCATABLE      :: Freq       (:)                           ! The array of frequencies (NumFreq).
@@ -141,7 +140,6 @@ REAL(ReKi)                   :: PerTurbInt                               ! Perce
 REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
 REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
 REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
-REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
 REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
 REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                           ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
 REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
@@ -198,8 +196,6 @@ REAL(ReKi)                   :: Zm_max                                   ! The n
 !REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
  REAL(ReKi)                   :: U0_1HR
 
-INTEGER,    ALLOCATABLE      :: EventName  (:)                           ! The timestep where the event starts, which determines the name of the event file
-INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
 INTEGER                      :: IECedition                               ! The edition number of the IEC 61400-1 standard that is being used (determines the scaling)
 INTEGER                      :: IECstandard                              ! The standard number (x) of the IEC 61400-x that is being used
 INTEGER                      :: IEC_WindType                             ! Number to indicate the IEC wind type
@@ -256,7 +252,7 @@ CHARACTER(  3)               :: WindProfileType                          ! The w
 
 
 TYPE                         :: Event                                    ! Coherent turbulent event to add to the background wind
-   INTEGER                   :: EventNum                                 ! The event number (index into EventName() array)
+   INTEGER                   :: EventNum                                 ! The event number (index into EventID() array)
    REAL(ReKi)                :: TStart                                   ! The time at which to add this event
    REAL(ReKi)                :: delt                                     ! The delta time before the event begins (for interpolation in AeroDyn)
    LOGICAL(1)                :: Connect2Prev = .FALSE.                   ! Whether this event is connected to the next, otherwise there is space between them
@@ -267,11 +263,18 @@ TYPE (Event), POINTER        :: PtrHead      => NULL()                   ! Point
 TYPE (Event), POINTER        :: PtrTail      => NULL()                   ! Pointer to the last event
 
 TYPE     :: CohStr_ParameterType   
-   REAL(ReKi)              ::  ScaleWid                        ! Scaling width for LE coherent turbulence (RotDiam in AeroDyn FD_Wind)
-   REAL(ReKi)              ::  ScaleVel                        ! Scaling velocity for LE coherent turbulence, U0.  2*U0 is the difference in wind speed between the top and bottom of the wave.   
-   REAL(ReKi)              ::  Uwave                           ! Wind speed at center of the k-h wave 
-   REAL(ReKi)              ::  Wsig                            ! Standard deviation of the w-component wind speed
+   REAL(ReKi)              :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
+   REAL(ReKi)              :: ScaleWid                        ! Scaling width for LE coherent turbulence (RotDiam in AeroDyn FD_Wind)
+   REAL(ReKi)              :: ScaleVel                        ! Scaling velocity for LE coherent turbulence, U0.  2*U0 is the difference in wind speed between the top and bottom of the wave.   
+   REAL(ReKi)              :: Uwave                           ! Wind speed at center of the k-h wave 
+   REAL(ReKi)              :: Wsig                            ! Standard deviation of the w-component wind speed
+
    
+   REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
+   REAL(ReKi), ALLOCATABLE      :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
+   INTEGER,    ALLOCATABLE      :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
+   INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
+      
    CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
    CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
    CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
@@ -279,6 +282,7 @@ TYPE     :: CohStr_ParameterType
 END TYPE CohStr_ParameterType
 
 TYPE :: CohStr_OutputType
+   REAL(ReKi)                   :: CTKE               ! Maximum predicted Coherent Turbulent Kenetic Energy at the center of the billow
    REAL(ReKi)                   :: lambda              ! The expected value of interarrival times for the Poisson process
    INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
    REAL(ReKi)                   :: ExpectedTime        ! Amount of time the coherent structures should take
