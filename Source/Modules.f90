@@ -1,4 +1,4 @@
-!=======================================================================
+!==================================================================================================================================   
 MODULE TurbSim_Types
 
 use NWTC_Library
@@ -36,20 +36,97 @@ use FFT_Module, only: FFT_DataType
    end type RandNum_OtherStateType
 
    
+            
+   TYPE                         :: Event                                    ! Coherent turbulent event to add to the background wind
+      INTEGER                   :: EventNum                                 ! The event number (index into EventID() array)
+      REAL(ReKi)                :: TStart                                   ! The time at which to add this event
+      REAL(ReKi)                :: delt                                     ! The delta time before the event begins (for interpolation in AeroDyn)
+      LOGICAL(1)                :: Connect2Prev = .FALSE.                   ! Whether this event is connected to the next, otherwise there is space between them
+      TYPE(Event), POINTER      :: Next         => NULL()                   ! The next event to add
+   END TYPE
+
+   TYPE     :: CohStr_ParameterType   
+      REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
+      REAL(ReKi)                   :: ScaleWid                        ! Scaling width for LE coherent turbulence (RotDiam in AeroDyn FD_Wind)
+      REAL(ReKi)                   :: ScaleVel                        ! Scaling velocity for LE coherent turbulence, U0.  2*U0 is the difference in wind speed between the top and bottom of the wave.   
+      REAL(ReKi)                   :: Uwave                           ! Wind speed at center of the k-h wave 
+      REAL(ReKi)                   :: Wsig                            ! Standard deviation of the w-component wind speed
+
+      REAL(ReKi)                   :: CTLy                                     ! Fractional location of tower centerline from right (looking downwind) to left side of the dataset.
+      REAL(ReKi)                   :: CTLz                                     ! Fractional location of hub height from the bottom of the dataset.
+      REAL(ReKi)                   :: CTStartTime                              ! Minimum time to add coherent structures
+      REAL(ReKi)                   :: DistScl                                  ! Disturbance scale for AeroDyn coherent turbulence events
+   
+      REAL(ReKi)                   :: Ym_max                                   ! The nondimensional lateral width of the coherent turbulence dataset
+      REAL(ReKi)                   :: Zm_max                                   ! The nondimensional vertical height of the coherent turbulence dataset
+      
+      
+      REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
+      REAL(ReKi), ALLOCATABLE      :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
+      INTEGER,    ALLOCATABLE      :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
+      INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
+      INTEGER                      :: NumEvents                                ! Number of events in the event data file (length of the Event* arrays)
+      
+      CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
+      CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
+      CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
+
+   END TYPE CohStr_ParameterType
+
+   TYPE :: CohStr_OutputType
+      REAL(ReKi)                   :: CTKE                                     ! Maximum predicted Coherent Turbulent Kenetic Energy at the center of the billow
+      REAL(ReKi)                   :: lambda                                   ! The expected value of interarrival times for the Poisson process
+      INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
+      INTEGER                      :: NumCTEvents_separate                     ! Number of separate events inserted into the .cts file (# events with .Connect2Prev = .false.) 
+      REAL(ReKi)                   :: ExpectedTime                             ! Amount of time the coherent structures should take
+      REAL(ReKi)                   :: EventTimeSum                             ! Amount of time the coherent structure takes
+      REAL(ReKi)                   :: EventTimeStep                            ! The average length of timesteps in output events
+   
+      INTEGER                      :: NumCTt                                   ! Number of data points to be printed in the output coherent event timestep file
+            
+      TYPE (Event), POINTER        :: PtrHead      => NULL()                   ! Pointer to the first event
+      TYPE (Event), POINTER        :: PtrTail      => NULL()                   ! Pointer to the last event   
+   
+   END TYPE CohStr_OutputType   
+   
+   
    type :: TurbSim_GridParameterType
       
       REAL(ReKi)                   :: GridHeight                               ! Grid height
-      REAL(ReKi)                   :: GridRes_Y                                ! Distance between two consecutive horizontal points on the grid (Horizontal resolution)
       REAL(ReKi)                   :: GridRes_Z                                ! Distance between two consecutive vertical points on the grid (Vertical resolution)
+
       REAL(ReKi)                   :: GridWidth                                ! Grid width.
+      REAL(ReKi)                   :: GridRes_Y                                ! Distance between two consecutive horizontal points on the grid (Horizontal resolution)
+      
       REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
       INTEGER(IntKi)               :: HubIndx                                  ! Index that tells where the hub point is in the V matrix
+      INTEGER(IntKi)               :: NPoints                                  ! Number of points being simulated.                        
       
+      REAL(ReKi),    ALLOCATABLE   :: Y          (:)                           ! The lateral locations of the points (YLim).
+      REAL(ReKi),    ALLOCATABLE   :: Z          (:)                           ! The vertical locations of the points (ZLim).
+      INTEGER(IntKi),ALLOCATABLE   :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
       
+      REAL(ReKi)                   :: TimeStep                                 ! Time step.
+      REAL(ReKi),    ALLOCATABLE   :: Freq       (:)                           ! The array of frequencies (NumFreq).
+      INTEGER(IntKi)               :: NumFreq                                  ! Number of frequencies (=NumSteps/2).
+      INTEGER(IntKi)               :: NumSteps                                 ! Number of time steps for the FFT.
+            
    end type TurbSim_GridParameterType
-      
-END MODULE TurbSim_Types
    
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+   
+END MODULE TurbSim_Types
+!==================================================================================================================================   
 MODULE TSMods
 
 USE                             NWTC_Library
@@ -58,10 +135,15 @@ use TurbSim_Types
 
 IMPLICIT                        NONE
 SAVE
-type(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
-type(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim
-type(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
-type(FFT_DataType)               :: FFT_Data
+TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
+TYPE(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim
+TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
+TYPE(FFT_DataType)               :: FFT_Data
+
+TYPE(CohStr_ParameterType)   :: p_CohStr
+TYPE(CohStr_OutputType)      :: y_CohStr
+
+
 
 REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
 REAL(ReKi), PARAMETER        :: profileZmin =  50.                       ! Lower height limit for extrapolating GP_LLJ profiles of ustar and zl
@@ -102,11 +184,6 @@ LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 CHARACTER(1), parameter      ::  Comp (3) = (/ 'u', 'v', 'w' /)  ! The names of the wind components
 
 
-
-
-
-
-
 CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter because may be using -2 or -3 standards
                                 (/'IEC 61400-1 Ed. 1: 1993', &
                                   'IEC 61400-1 Ed. 2: 1999', &
@@ -118,14 +195,8 @@ REAL(ReKi)                   :: AnalysisTime                             ! Analy
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
 REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
 REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
-REAL(ReKi)                   :: CTLy                                     ! Fractional location of tower centerline from right (looking downwind) to left side of the dataset.
-REAL(ReKi)                   :: CTLz                                     ! Fractional location of hub height from the bottom of the dataset.
-REAL(ReKi)                   :: CTStartTime                              ! Minimum time to add coherent structures
-REAL(ReKi)                   :: DistScl                                  ! Disturbance scale for AeroDyn coherent turbulence events
 REAL(ReKi)                   :: ETMc                                     ! The c parameter in IEC ETM, 61400-1, Ed 3. Section 6.3.2.3, Eq. 19.  Variable per last sentence in section 7.4.1
-REAL(ReKi)                   :: EventTimeStep                            ! The average length of timesteps in output events
 REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
-REAL(ReKi), ALLOCATABLE      :: Freq       (:)                           ! The array of frequencies (NumFreq).
 REAL(ReKi), ALLOCATABLE      :: Freq_USR(:)                              ! frequencies for the user-defined spectra
 REAL(ReKi)                   :: h                                        ! Boundary layer depth
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
@@ -144,12 +215,11 @@ REAL(ReKi)                   :: PLExp                                    ! Rotor
 REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                           ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
 REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
 REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
-REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NTot,3).
+REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NPoints,3).
 REAL(ReKi), ALLOCATABLE      :: SDary      (:)                           ! The array of standard deviations (NumGrid_Z,NumGrid_Y).
-REAL(ReKi)                   :: SigmaIEC                                 ! IEC standard deviation.
+REAL(ReKi)                   :: SigmaIEC   (3)                           ! IEC standard deviation.
 REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
 REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
-REAL(ReKi)                   :: TimeStep                                 ! Time step.
 REAL(ReKi)                   :: Sigma_U2                                 ! Standard Deviation of U velocity, squared.
 REAL(ReKi)                   :: Sigma_V2                                 ! Standard Deviation of V velocity, squared.
 REAL(ReKi)                   :: Sigma_W2                                 ! Standard Deviation of W velocity, squared.
@@ -170,7 +240,7 @@ REAL(ReKi)                   :: UstarDiab                                ! The d
 REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: U_Ref                                    ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
-REAL(ReKi), ALLOCATABLE      :: V          (:,:,:)                       ! An array containing the summations of the rows of H (NumSteps,NTot,3).
+REAL(ReKi), ALLOCATABLE      :: V          (:,:,:)                       ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
 REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
 REAL(ReKi)                   :: Vave                                     ! The IEC Vave for ETM
 REAL(ReKi)                   :: Vref                                     ! The IEC Vref for ETM
@@ -180,9 +250,6 @@ REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A pro
 REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-specified wind direction profile, varying with height
 REAL(ReKi), ALLOCATABLE      :: Work       (:,:)                         ! A temporary work array (NumSteps+2,3).
 REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
-REAL(ReKi), ALLOCATABLE      :: Y          (:)                           ! The lateral locations of the points (YLim).
-REAL(ReKi)                   :: Ym_max                                   ! The nondimensional lateral width of the coherent turbulence dataset
-REAL(ReKi), ALLOCATABLE      :: Z          (:)                           ! The vertical locations of the points (ZLim).
 REAL(ReKi), ALLOCATABLE      :: Z_USR      (:)                           ! Heights of user-specified variables
 REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
 REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
@@ -190,7 +257,6 @@ REAL(ReKi)                   :: ZJetMax                                  ! The h
 REAL(ReKi)                   :: ZL                                       ! A measure of stability
 REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
 REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
-REAL(ReKi)                   :: Zm_max                                   ! The nondimensional vertical height of the coherent turbulence dataset
 
 !REAL(ReKi)                   :: RefHt                                    ! Reference height. ADDED BY Y.G.
 !REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
@@ -199,16 +265,10 @@ REAL(ReKi)                   :: Zm_max                                   ! The n
 INTEGER                      :: IECedition                               ! The edition number of the IEC 61400-1 standard that is being used (determines the scaling)
 INTEGER                      :: IECstandard                              ! The standard number (x) of the IEC 61400-x that is being used
 INTEGER                      :: IEC_WindType                             ! Number to indicate the IEC wind type
-INTEGER,    ALLOCATABLE      :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
 INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
-INTEGER                      :: NTot                                     ! Number of points in grid, plus the hub center.
-INTEGER                      :: NumCTt                                   ! Number of data points in the output coherent event timestep file
-INTEGER                      :: NumEvents                                ! Number of events in the event data file
-INTEGER                      :: NumFreq                                  ! Number of frequencies (=NumSteps/2).
 INTEGER                      :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
 INTEGER                      :: NumGrid_Z                                ! Grid dimension. (in vertical direction)
 INTEGER                      :: NumOutSteps                              ! Number of output time steps.
-INTEGER                      :: NumSteps                                 ! Number of time steps for the FFT.
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
 INTEGER                      :: ScaleIEC                                 ! Flag to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
@@ -251,46 +311,8 @@ CHARACTER(  6)               :: TurbModel                                ! Turbu
 CHARACTER(  3)               :: WindProfileType                          ! The wind profile type
 
 
-TYPE                         :: Event                                    ! Coherent turbulent event to add to the background wind
-   INTEGER                   :: EventNum                                 ! The event number (index into EventID() array)
-   REAL(ReKi)                :: TStart                                   ! The time at which to add this event
-   REAL(ReKi)                :: delt                                     ! The delta time before the event begins (for interpolation in AeroDyn)
-   LOGICAL(1)                :: Connect2Prev = .FALSE.                   ! Whether this event is connected to the next, otherwise there is space between them
-   TYPE(Event), POINTER      :: Next         => NULL()                   ! The next event to add
-END TYPE
 
-TYPE (Event), POINTER        :: PtrHead      => NULL()                   ! Pointer to the first event
-TYPE (Event), POINTER        :: PtrTail      => NULL()                   ! Pointer to the last event
 
-TYPE     :: CohStr_ParameterType   
-   REAL(ReKi)              :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
-   REAL(ReKi)              :: ScaleWid                        ! Scaling width for LE coherent turbulence (RotDiam in AeroDyn FD_Wind)
-   REAL(ReKi)              :: ScaleVel                        ! Scaling velocity for LE coherent turbulence, U0.  2*U0 is the difference in wind speed between the top and bottom of the wave.   
-   REAL(ReKi)              :: Uwave                           ! Wind speed at center of the k-h wave 
-   REAL(ReKi)              :: Wsig                            ! Standard deviation of the w-component wind speed
-
-   
-   REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
-   REAL(ReKi), ALLOCATABLE      :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
-   INTEGER,    ALLOCATABLE      :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
-   INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
-      
-   CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
-   CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
-   CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
-   
-END TYPE CohStr_ParameterType
-
-TYPE :: CohStr_OutputType
-   REAL(ReKi)                   :: CTKE               ! Maximum predicted Coherent Turbulent Kenetic Energy at the center of the billow
-   REAL(ReKi)                   :: lambda              ! The expected value of interarrival times for the Poisson process
-   INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
-   REAL(ReKi)                   :: ExpectedTime        ! Amount of time the coherent structures should take
-   REAL(ReKi)                   :: EventTimeSum = 0.0  ! Amount of time the coherent structure takes
-END TYPE CohStr_OutputType
-
-TYPE(CohStr_ParameterType)   :: p_CohStr
-TYPE(CohStr_OutputType)      :: y_CohStr
 
 END MODULE TSMods
-!=======================================================================
+!==================================================================================================================================   
