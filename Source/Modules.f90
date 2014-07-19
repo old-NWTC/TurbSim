@@ -4,6 +4,12 @@ MODULE TurbSim_Types
 use NWTC_Library
 use FFT_Module, only: FFT_DataType
 
+LOGICAL,    PARAMETER        :: COH_OUT  = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: DEBUG_OUT= .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: PSD_OUT  = .FALSE. !                     ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+
+
    INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
 
    INTEGER(IntKi), PARAMETER :: SpecModel_NONE   =  0  ! No turbulence
@@ -21,6 +27,13 @@ use FFT_Module, only: FFT_DataType
    INTEGER(IntKi), PARAMETER :: SpecModel_MODVKM = 12  ! user-specified scaling in von Karman model
    INTEGER(IntKi), PARAMETER :: SpecModel_USRVKM = 13  ! user-specified scaling in von Karman model
    INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 14  ! User-defined spectra from file
+   
+   
+   INTEGER(IntKi), PARAMETER :: IEC_ETM           = 1   ! Number to indicate the IEC Normal Turbulence Model
+   INTEGER(IntKi), PARAMETER :: IEC_EWM1          = 2   ! Number to indicate the IEC Extreme Wind speed Model (50-year)
+   INTEGER(IntKi), PARAMETER :: IEC_EWM50         = 3   ! Number to indicate the IEC Extreme Wind speed Model ( 1-year)
+   INTEGER(IntKi), PARAMETER :: IEC_EWM100        = 5   ! Number to indicate the IEC Extreme Wind speed Model ( 100-year)
+   INTEGER(IntKi), PARAMETER :: IEC_NTM           = 4   ! Number to indicate the IEC Extreme Turbulence Model
    
    
    type :: RandNum_ParameterType
@@ -41,7 +54,7 @@ use FFT_Module, only: FFT_DataType
       INTEGER                   :: EventNum                                 ! The event number (index into EventID() array)
       REAL(ReKi)                :: TStart                                   ! The time at which to add this event
       REAL(ReKi)                :: delt                                     ! The delta time before the event begins (for interpolation in AeroDyn)
-      LOGICAL(1)                :: Connect2Prev = .FALSE.                   ! Whether this event is connected to the next, otherwise there is space between them
+      LOGICAL                   :: Connect2Prev = .FALSE.                   ! Whether this event is connected to the next, otherwise there is space between them
       TYPE(Event), POINTER      :: Next         => NULL()                   ! The next event to add
    END TYPE
 
@@ -61,11 +74,11 @@ use FFT_Module, only: FFT_DataType
       REAL(ReKi)                   :: Zm_max                                   ! The nondimensional vertical height of the coherent turbulence dataset
       
       
-      REAL(ReKi), ALLOCATABLE      :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
-      REAL(ReKi), ALLOCATABLE      :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
-      INTEGER,    ALLOCATABLE      :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
-      INTEGER,    ALLOCATABLE      :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
-      INTEGER                      :: NumEvents                                ! Number of events in the event data file (length of the Event* arrays)
+      REAL(ReKi),     ALLOCATABLE  :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
+      REAL(ReKi),     ALLOCATABLE  :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
+      INTEGER(IntKi), ALLOCATABLE  :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
+      INTEGER(IntKi), ALLOCATABLE  :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
+      INTEGER(IntKi)               :: NumEvents                                ! Number of events in the event data file (length of the Event* arrays)
       
       CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
       CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
@@ -76,13 +89,13 @@ use FFT_Module, only: FFT_DataType
    TYPE :: CohStr_OutputType
       REAL(ReKi)                   :: CTKE                                     ! Maximum predicted Coherent Turbulent Kenetic Energy at the center of the billow
       REAL(ReKi)                   :: lambda                                   ! The expected value of interarrival times for the Poisson process
-      INTEGER                      :: NumCTEvents                              ! Number of events to be inserted into the .cts file
-      INTEGER                      :: NumCTEvents_separate                     ! Number of separate events inserted into the .cts file (# events with .Connect2Prev = .false.) 
+      INTEGER(IntKi)               :: NumCTEvents                              ! Number of events to be inserted into the .cts file
+      INTEGER(IntKi)               :: NumCTEvents_separate                     ! Number of separate events inserted into the .cts file (# events with .Connect2Prev = .false.) 
       REAL(ReKi)                   :: ExpectedTime                             ! Amount of time the coherent structures should take
       REAL(ReKi)                   :: EventTimeSum                             ! Amount of time the coherent structure takes
       REAL(ReKi)                   :: EventTimeStep                            ! The average length of timesteps in output events
    
-      INTEGER                      :: NumCTt                                   ! Number of data points to be printed in the output coherent event timestep file
+      INTEGER(IntKi)               :: NumCTt                                   ! Number of data points to be printed in the output coherent event timestep file
             
       TYPE (Event), POINTER        :: PtrHead      => NULL()                   ! Pointer to the first event
       TYPE (Event), POINTER        :: PtrTail      => NULL()                   ! Pointer to the last event   
@@ -114,7 +127,32 @@ use FFT_Module, only: FFT_DataType
    end type TurbSim_GridParameterType
    
    
-   
+   type IEC_ParameterType
+      INTEGER(IntKi)               :: IECedition                               ! The edition number of the IEC 61400-1 standard that is being used (determines the scaling)
+      INTEGER(IntKi)               :: IECstandard                              ! The standard number (x) of the IEC 61400-x that is being used
+      INTEGER(IntKi)               :: IEC_WindType                             ! Number to indicate the IEC wind type
+      INTEGER(IntKi)               :: ScaleIEC                                 ! Switch to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
+      
+      REAL(ReKi)                   :: Lambda         (3)                       ! IEC turbulence scale parameter: defined as wavelength where the non-dimensional power spectral density fS(f)/sigma^2 == 0.05 [m]
+      REAL(ReKi)                   :: SigmaIEC       (3)                       ! IEC target standard deviation.
+      REAL(ReKi)                   :: IntegralScale  (3)                       ! IEC integral scales (s)
+      REAL(ReKi)                   :: LC                                       ! IEC coherency scale parameter
+      REAL(ReKi)                   :: SigmaSlope                               ! Slope used with IEC models to determine target sigma and turbulent intensity
+      REAL(ReKi)                   :: TurbInt                                  ! IEC target Turbulence Intensity 
+      REAL(ReKi)                   :: TurbInt15                                ! Turbulence Intensity at hub height with a mean wind speed of 15 m/s
+      REAL(ReKi)                   :: ETMc                                     ! The c parameter in IEC ETM, 61400-1, Ed 3. Section 6.3.2.3, Eq. 19.  Variable per last sentence in section 7.4.1
+      REAL(ReKi)                   :: Vave                                     ! The IEC Vave for ETM
+      REAL(ReKi)                   :: Vref                                     ! The IEC Vref for ETM
+      REAL(ReKi)                   :: PerTurbInt                               ! Percent Turbulence Intensity
+                  
+      LOGICAL                      :: NumTurbInp                               ! Flag to indicate if turbulence is user-specified (as opposed to IEC standard A, B, or C)
+         
+      CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic.
+      CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class.
+      CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type
+      
+      
+   end type IEC_ParameterType
    
    
    
@@ -137,12 +175,12 @@ IMPLICIT                        NONE
 SAVE
 TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
 TYPE(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim
+TYPE(IEC_ParameterType)          :: p_IEC                       ! parameters for IEC models
 TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
 TYPE(FFT_DataType)               :: FFT_Data
 
 TYPE(CohStr_ParameterType)   :: p_CohStr
 TYPE(CohStr_OutputType)      :: y_CohStr
-
 
 
 REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
@@ -151,11 +189,6 @@ REAL(ReKi), PARAMETER        :: Omega     = 7.292116E-05                 ! Angul
 REAL(ReKi), PARAMETER        :: Tolerance = 0.0001                       ! The largest difference between two numbers that are assumed to be equal
 
 
-INTEGER,    PARAMETER        :: IEC_ETM        = 1                       ! Number to indicate the IEC Normal Turbulence Model
-INTEGER,    PARAMETER        :: IEC_EWM1       = 2                       ! Number to indicate the IEC Extreme Wind speed Model (50-year)
-INTEGER,    PARAMETER        :: IEC_EWM50      = 3                       ! Number to indicate the IEC Extreme Wind speed Model ( 1-year)
-INTEGER,    PARAMETER        :: IEC_EWM100     = 5                       ! Number to indicate the IEC Extreme Wind speed Model ( 100-year)
-INTEGER,    PARAMETER        :: IEC_NTM        = 4                       ! Number to indicate the IEC Extreme Turbulence Model
 
 
 INTEGER,    PARAMETER        :: UACT     = 14                            ! I/O unit for AeroDyn coherent turbulence
@@ -175,10 +208,6 @@ INTEGER,    PARAMETER        :: UC       = 22                            ! I/O u
 INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
 INTEGER,    PARAMETER        :: UP       = 21                            ! I/O unit for PSD debugging file.
 
-LOGICAL,    PARAMETER        :: COH_OUT  = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: DEBUG_OUT= .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: PSD_OUT  = .FALSE. !                     ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 
 LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 CHARACTER(1), parameter      ::  Comp (3) = (/ 'u', 'v', 'w' /)  ! The names of the wind components
@@ -195,7 +224,6 @@ REAL(ReKi)                   :: AnalysisTime                             ! Analy
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
 REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
 REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
-REAL(ReKi)                   :: ETMc                                     ! The c parameter in IEC ETM, 61400-1, Ed 3. Section 6.3.2.3, Eq. 19.  Variable per last sentence in section 7.4.1
 REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
 REAL(ReKi), ALLOCATABLE      :: Freq_USR(:)                              ! frequencies for the user-defined spectra
 REAL(ReKi)                   :: h                                        ! Boundary layer depth
@@ -207,7 +235,6 @@ REAL(ReKi)                   :: InCohB     (3)                           ! Conta
 REAL(ReKi)                   :: L                                        ! M-O length
 REAL(ReKi), ALLOCATABLE      :: L_USR      (:)                           ! User-specified von Karman length scale, varying with height
 REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
-REAL(ReKi)                   :: PerTurbInt                               ! Percent Turbulence Intensity
 REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
 REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
 REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
@@ -217,7 +244,6 @@ REAL(ReKi)                   :: RICH_NO                                  ! Gradi
 REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
 REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NPoints,3).
 REAL(ReKi), ALLOCATABLE      :: SDary      (:)                           ! The array of standard deviations (NumGrid_Z,NumGrid_Y).
-REAL(ReKi)                   :: SigmaIEC   (3)                           ! IEC standard deviation.
 REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
 REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
 REAL(ReKi)                   :: Sigma_U2                                 ! Standard Deviation of U velocity, squared.
@@ -242,8 +268,6 @@ REAL(ReKi)                   :: UstarSlope                               ! A sca
 REAL(ReKi)                   :: U_Ref                                    ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
 REAL(ReKi), ALLOCATABLE      :: V          (:,:,:)                       ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
 REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
-REAL(ReKi)                   :: Vave                                     ! The IEC Vave for ETM
-REAL(ReKi)                   :: Vref                                     ! The IEC Vref for ETM
 REAL(ReKi), ALLOCATABLE      :: Vspec_USR(:)                             ! user-defined v-component spectrum
 
 REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
@@ -262,16 +286,12 @@ REAL(ReKi)                   :: ZLoffset                                 ! An of
 !REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
  REAL(ReKi)                   :: U0_1HR
 
-INTEGER                      :: IECedition                               ! The edition number of the IEC 61400-1 standard that is being used (determines the scaling)
-INTEGER                      :: IECstandard                              ! The standard number (x) of the IEC 61400-x that is being used
-INTEGER                      :: IEC_WindType                             ! Number to indicate the IEC wind type
 INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
 INTEGER                      :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
 INTEGER                      :: NumGrid_Z                                ! Grid dimension. (in vertical direction)
 INTEGER                      :: NumOutSteps                              ! Number of output time steps.
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
-INTEGER                      :: ScaleIEC                                 ! Flag to indicate if turbulence should be scaled to target value; 0 = NO scaling; 1 = scale based on hub; 2 = scale each point individually
 INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
 INTEGER                      :: YLim                                     ! Number of horizontal positions in the grid
 INTEGER                      :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
@@ -282,7 +302,6 @@ LOGICAL                      :: ExtraHubPT                               ! Flag 
 LOGICAL                      :: ExtraTwrPT                               ! Flag to indicate if the tower is on the regular grid or if an extra point must be added
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
-LOGICAL                      :: NumTurbInp                               ! Flag to indicate if turbulence is user-specified (as opposed to IEC standard A, B, or C)
 LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
 LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
 LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
@@ -300,9 +319,6 @@ CHARACTER(200)               :: DescStr                                  ! Strin
 CHARACTER(200)               :: FormStr                                  ! String used to store format specifiers.
 CHARACTER(200)               :: FormStr1                                 ! String used to store format specifiers.
 CHARACTER(200)               :: FormStr2                                 ! String used to store format specifiers.
-CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic.
-CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class.
-CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type
 CHARACTER(200)               :: InFile = 'TurbSim.inp'                   ! Root name of the I/O files.
 CHARACTER(  6)               :: RNG_type                                 ! Type of Random Number Generator to use
 CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
