@@ -107,23 +107,33 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       
       REAL(ReKi)                   :: GridHeight                               ! Grid height
       REAL(ReKi)                   :: GridRes_Z                                ! Distance between two consecutive vertical points on the grid (Vertical resolution)
+      INTEGER(IntKi)               :: NumGrid_Z                                ! Grid dimension. (in vertical direction)
 
       REAL(ReKi)                   :: GridWidth                                ! Grid width.
       REAL(ReKi)                   :: GridRes_Y                                ! Distance between two consecutive horizontal points on the grid (Horizontal resolution)
+      INTEGER(IntKi)               :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
       
       REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
       INTEGER(IntKi)               :: HubIndx                                  ! Index that tells where the hub point is in the V matrix
       INTEGER(IntKi)               :: NPoints                                  ! Number of points being simulated.                        
-      
+            
+      REAL(ReKi)                   :: HubHt                                    ! Hub height.
+      LOGICAL                      :: ExtraHubPT                               ! Flag to indicate if the hub is on the regular grid or if an extra point must be added
+      LOGICAL                      :: ExtraTwrPT                               ! Flag to indicate if the tower is on the regular grid or if an extra point must be added
+            
       REAL(ReKi),    ALLOCATABLE   :: Y          (:)                           ! The lateral locations of the points (YLim).
       REAL(ReKi),    ALLOCATABLE   :: Z          (:)                           ! The vertical locations of the points (ZLim).
       INTEGER(IntKi),ALLOCATABLE   :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
+      INTEGER(IntKi)               :: YLim                                     ! Number of horizontal positions in the grid
+      INTEGER(IntKi)               :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
       
+      REAL(ReKi)                   :: AnalysisTime                             ! Analysis Time. (amount of time for analysis, allows user to perform analysis using one time length, but output UsableTime            
       REAL(ReKi)                   :: TimeStep                                 ! Time step.
       REAL(ReKi),    ALLOCATABLE   :: Freq       (:)                           ! The array of frequencies (NumFreq).
       INTEGER(IntKi)               :: NumFreq                                  ! Number of frequencies (=NumSteps/2).
       INTEGER(IntKi)               :: NumSteps                                 ! Number of time steps for the FFT.
-            
+      INTEGER(IntKi)               :: NumOutSteps                              ! Number of output time steps.
+                  
    end type TurbSim_GridParameterType
    
    
@@ -220,19 +230,26 @@ CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter be
 
 
 
-REAL(ReKi)                   :: AnalysisTime                             ! Analysis Time. (amount of time for analysis, allows user to perform analysis using one time length, but output UsableTime
+
+
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
 REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
+
 REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
+
 REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
-REAL(ReKi), ALLOCATABLE      :: Freq_USR(:)                              ! frequencies for the user-defined spectra
 REAL(ReKi)                   :: h                                        ! Boundary layer depth
+REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
+REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
+REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
+
+
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
 REAL(ReKi)                   :: HH_HFlowAng                              ! Horizontal flow angle at the hub (may be different than HFlowAng if using direction profile).
-REAL(ReKi)                   :: HubHt                                    ! Hub height.
 REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
 REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
 REAL(ReKi)                   :: L                                        ! M-O length
+REAL(ReKi), ALLOCATABLE      :: Freq_USR(:)                              ! frequencies for the user-defined spectra
 REAL(ReKi), ALLOCATABLE      :: L_USR      (:)                           ! User-specified von Karman length scale, varying with height
 REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
 REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
@@ -240,7 +257,6 @@ REAL(ReKi)                   :: PC_UV                                    ! u'v' 
 REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
 REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
 REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                           ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
-REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
 REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
 REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NPoints,3).
 REAL(ReKi), ALLOCATABLE      :: SDary      (:)                           ! The array of standard deviations (NumGrid_Z,NumGrid_Y).
@@ -275,8 +291,6 @@ REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-
 REAL(ReKi), ALLOCATABLE      :: Work       (:,:)                         ! A temporary work array (NumSteps+2,3).
 REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
 REAL(ReKi), ALLOCATABLE      :: Z_USR      (:)                           ! Heights of user-specified variables
-REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
-REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
 REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
 REAL(ReKi)                   :: ZL                                       ! A measure of stability
 REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
@@ -287,19 +301,12 @@ REAL(ReKi)                   :: ZLoffset                                 ! An of
  REAL(ReKi)                   :: U0_1HR
 
 INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
-INTEGER                      :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
-INTEGER                      :: NumGrid_Z                                ! Grid dimension. (in vertical direction)
-INTEGER                      :: NumOutSteps                              ! Number of output time steps.
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
 INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
-INTEGER                      :: YLim                                     ! Number of horizontal positions in the grid
-INTEGER                      :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
 
 
 LOGICAL                      :: Clockwise                                ! Flag to indicate clockwise rotation when looking downwind.
-LOGICAL                      :: ExtraHubPT                               ! Flag to indicate if the hub is on the regular grid or if an extra point must be added
-LOGICAL                      :: ExtraTwrPT                               ! Flag to indicate if the tower is on the regular grid or if an extra point must be added
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
 LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
