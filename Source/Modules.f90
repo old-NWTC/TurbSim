@@ -36,11 +36,28 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    INTEGER(IntKi), PARAMETER :: IEC_NTM           = 4   ! Number to indicate the IEC Extreme Turbulence Model
    
    
+      ! distinct output file formats (list by extension)
+   INTEGER(IntKi), PARAMETER :: FileExt_BTS   =  1       ! .bts file         : AeroDyn FF data (binary) [WrADFF]
+   INTEGER(IntKi), PARAMETER :: FileExt_WND   =  2       ! .wnd file         : BLADED FF data (binary)  [WrBLFF]
+   INTEGER(IntKi), PARAMETER :: FileExt_HH    =  3       ! .hh file          : AeroDyn HH data (formatted) [WrADHH]
+   INTEGER(IntKi), PARAMETER :: FileExt_BIN   =  4       ! .bin file         : binary HH turbulence parameters [WrBHHTP]
+   INTEGER(IntKi), PARAMETER :: FileExt_DAT   =  5       ! .dat file         : formatted HH turbulence parameters [WrFHHTP]
+   INTEGER(IntKi), PARAMETER :: FileExt_UVW   =  6       ! .u, .v, .w files  : formatted FF data (Traditional SNLWIND-3D format) [WrFMTFF]
+   INTEGER(IntKi), PARAMETER :: FileExt_CTS   =  7       ! .cts file         : coherent turbulence
+   INTEGER(IntKi), PARAMETER :: FileExt_TWR   =  8       ! .twr file         : AeroDyn tower data (binary)
+   INTEGER(IntKi), PARAMETER :: NumFileFmt    =  8       ! TOTAL number of output file formats (used to dimension array)
+   
+   
+   
+   CHARACTER(1),   PARAMETER ::  Comp (3) = (/ 'u', 'v', 'w' /)  ! The names of the wind components
+   
+   
    type :: RandNum_ParameterType
    
       integer(IntKi)                  :: pRNG
       INTEGER(IntKi)                  :: RandSeed   (3)                           ! The array that holds the initial random seeds for the 3 components.
       INTEGER(IntKi),    ALLOCATABLE  :: RandSeedAry(:)                           ! The array that holds the random seeds.
+      CHARACTER(  6)                  :: RNG_type                                 ! Type of Random Number Generator to use
             
    end type RandNum_ParameterType
 
@@ -112,10 +129,13 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       REAL(ReKi)                   :: GridWidth                                ! Grid width.
       REAL(ReKi)                   :: GridRes_Y                                ! Distance between two consecutive horizontal points on the grid (Horizontal resolution)
       INTEGER(IntKi)               :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
+
+      INTEGER(IntKi)               :: NPoints                                  ! Number of points being simulated.                        
       
       REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
+      REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
+      
       INTEGER(IntKi)               :: HubIndx                                  ! Index that tells where the hub point is in the V matrix
-      INTEGER(IntKi)               :: NPoints                                  ! Number of points being simulated.                        
             
       REAL(ReKi)                   :: HubHt                                    ! Hub height.
       LOGICAL                      :: ExtraHubPT                               ! Flag to indicate if the hub is on the regular grid or if an extra point must be added
@@ -128,12 +148,15 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       INTEGER(IntKi)               :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
       
       REAL(ReKi)                   :: AnalysisTime                             ! Analysis Time. (amount of time for analysis, allows user to perform analysis using one time length, but output UsableTime            
+      REAL(ReKi)                   :: UsableTime                               ! Usable time.  Program adds GridWidth/MeanHHWS if not specified as "ALL"  AnalysisTime in input file.
       REAL(ReKi)                   :: TimeStep                                 ! Time step.
       REAL(ReKi),    ALLOCATABLE   :: Freq       (:)                           ! The array of frequencies (NumFreq).
       INTEGER(IntKi)               :: NumFreq                                  ! Number of frequencies (=NumSteps/2).
       INTEGER(IntKi)               :: NumSteps                                 ! Number of time steps for the FFT.
       INTEGER(IntKi)               :: NumOutSteps                              ! Number of output time steps.
                   
+      LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
+      
    end type TurbSim_GridParameterType
    
    
@@ -159,14 +182,14 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
          
       CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic.
       CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class.
-      CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type
-      
-      
+      CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type            
    end type IEC_ParameterType
    
    
+   type Meteorology_ParameterType
    
    
+   end type Meteorology_ParameterType
    
    
    
@@ -184,12 +207,14 @@ use TurbSim_Types
 IMPLICIT                        NONE
 SAVE
 TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
-TYPE(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim
+TYPE(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
+TYPE(Meteorology_ParameterType)  :: p_met                       ! parameters for TurbSim 
 TYPE(IEC_ParameterType)          :: p_IEC                       ! parameters for IEC models
+TYPE(CohStr_ParameterType)       :: p_CohStr
+
 TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
 TYPE(FFT_DataType)               :: FFT_Data
 
-TYPE(CohStr_ParameterType)   :: p_CohStr
 TYPE(CohStr_OutputType)      :: y_CohStr
 
 
@@ -201,18 +226,7 @@ REAL(ReKi), PARAMETER        :: Tolerance = 0.0001                       ! The l
 
 
 
-INTEGER,    PARAMETER        :: UACT     = 14                            ! I/O unit for AeroDyn coherent turbulence
-INTEGER,    PARAMETER        :: UACTTS   = 15                            ! I/O unit for coherent turbulence time step history file
-INTEGER,    PARAMETER        :: UAFFW    = 9                             ! I/O unit for AeroDyn FF data (*.bts file).
-INTEGER,    PARAMETER        :: UAHH     = 10                            ! I/O unit for AeroDyn HH data (*.hh  file).
-INTEGER,    PARAMETER        :: UATWR    = 13                            ! I/O unit for AeroDyn tower data (*.twr file).
-INTEGER,    PARAMETER        :: UBFFW    = 16                            ! I/O unit for BLADED FF data (*.wnd file).
-INTEGER,    PARAMETER        :: UFFF     = 4                             ! I/O unit for formatted FF data.
-INTEGER,    PARAMETER        :: UFTP     = 12                            ! I/O unit for formatted HH turbulence properties.
-INTEGER,    PARAMETER        :: UGTP     = 11                            ! I/O unit for GenPro HH turbulence properties.
-INTEGER,    PARAMETER        :: UI       = 1                             ! I/O unit for input file.
 INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
-INTEGER,    PARAMETER        :: USpec    = 17                            ! I/O unit for user-defined spectra
 
 INTEGER,    PARAMETER        :: UC       = 22                            ! I/O unit for Coherence debugging file.
 INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
@@ -220,7 +234,6 @@ INTEGER,    PARAMETER        :: UP       = 21                            ! I/O u
 
 
 LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
-CHARACTER(1), parameter      ::  Comp (3) = (/ 'u', 'v', 'w' /)  ! The names of the wind components
 
 
 CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter because may be using -2 or -3 standards
@@ -230,104 +243,108 @@ CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter be
 
 
 
-
-
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
 REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
 
 REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
+REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
+REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
 
 REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
 REAL(ReKi)                   :: h                                        ! Boundary layer depth
 REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
 REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
 REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
+REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
+REAL(ReKi)                   :: L                                        ! M-O length
+REAL(ReKi)                   :: ZL                                       ! A measure of stability
+REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
+
+REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
+REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
+
+
+REAL(ReKi)                   :: Ustar                                    ! Shear or friction velocity (m/s) -- rotor-disk average
+REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
+REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
+!REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
+
+REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
+
+
+LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
+
+REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
+REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
+REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
 
 
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
 REAL(ReKi)                   :: HH_HFlowAng                              ! Horizontal flow angle at the hub (may be different than HFlowAng if using direction profile).
-REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
-REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
-REAL(ReKi)                   :: L                                        ! M-O length
-REAL(ReKi), ALLOCATABLE      :: Freq_USR(:)                              ! frequencies for the user-defined spectra
+REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
+REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
+
+
+
+REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                      ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
+REAL(ReKi), ALLOCATABLE      :: S           (:,:,:)                      ! The turbulence PSD array (NumFreq,NPoints,3).
+REAL(ReKi), ALLOCATABLE      :: TRH         (:)                          ! The transfer function  matrix (NumSteps).
+REAL(ReKi), ALLOCATABLE      :: U           (:)                          ! The steady u-component wind speeds for the grid (ZLim).
+REAL(ReKi), ALLOCATABLE      :: V           (:,:,:)                      ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
+REAL(ReKi), ALLOCATABLE      :: Work        (:,:)                        ! A temporary work array (NumSteps+2,3).
+
+
+
+INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
+REAL(ReKi), ALLOCATABLE      :: Z_USR      (:)                           ! Heights of user-specified variables
+REAL(ReKi), ALLOCATABLE      :: U_USR      (:)                           ! User-specified total wind speed, varying with height
+REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-specified wind direction profile, varying with height
 REAL(ReKi), ALLOCATABLE      :: L_USR      (:)                           ! User-specified von Karman length scale, varying with height
-REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
-REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
-REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
-REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
-REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
-REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                           ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
-REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
-REAL(ReKi), ALLOCATABLE      :: S          (:,:,:)                       ! The turbulence PSD array (NumFreq,NPoints,3).
-REAL(ReKi), ALLOCATABLE      :: SDary      (:)                           ! The array of standard deviations (NumGrid_Z,NumGrid_Y).
 REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
+
+INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
+REAL(ReKi), ALLOCATABLE      :: Freq_USR   (:)                           ! frequencies for the user-defined spectra
+REAL(ReKi), ALLOCATABLE      :: Uspec_USR(:)                             ! user-defined u-component spectrum
+REAL(ReKi), ALLOCATABLE      :: Vspec_USR(:)                             ! user-defined v-component spectrum
+REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
+
+
 REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
 REAL(ReKi)                   :: Sigma_U2                                 ! Standard Deviation of U velocity, squared.
 REAL(ReKi)                   :: Sigma_V2                                 ! Standard Deviation of V velocity, squared.
 REAL(ReKi)                   :: Sigma_W2                                 ! Standard Deviation of W velocity, squared.
-REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
-REAL(ReKi), ALLOCATABLE      :: TRH        (:)                           ! The transfer function  matrix (NumSteps).
-REAL(ReKi)                   :: TsclFact                                 ! Scale factor for time (h/U0) in coherent turbulence events
-REAL(ReKi), ALLOCATABLE      :: U          (:)                           ! The steady u-component wind speeds for the grid (ZLim).
 REAL(ReKi)                   :: H_ref                                    ! Height for reference wind speed.
 REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
-REAL(ReKi), ALLOCATABLE      :: U_USR      (:)                           ! User-specified total wind speed, varying with height
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
-REAL(ReKi)                   :: UsableTime                               ! Usable time.  Program adds GridWidth/MeanHHWS.
-REAL(ReKi), ALLOCATABLE      :: Uspec_USR(:)                             ! user-defined u-component spectrum
-REAL(ReKi)                   :: Ustar                                    ! Shear or friction velocity (m/s) -- rotor-disk average
-REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
-REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
 REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: U_Ref                                    ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
-REAL(ReKi), ALLOCATABLE      :: V          (:,:,:)                       ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
-REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
-REAL(ReKi), ALLOCATABLE      :: Vspec_USR(:)                             ! user-defined v-component spectrum
 
-REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
-REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-specified wind direction profile, varying with height
-REAL(ReKi), ALLOCATABLE      :: Work       (:,:)                         ! A temporary work array (NumSteps+2,3).
-REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
-REAL(ReKi), ALLOCATABLE      :: Z_USR      (:)                           ! Heights of user-specified variables
-REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
-REAL(ReKi)                   :: ZL                                       ! A measure of stability
-REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
-REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
+
 
 !REAL(ReKi)                   :: RefHt                                    ! Reference height. ADDED BY Y.G.
 !REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
  REAL(ReKi)                   :: U0_1HR
 
-INTEGER                      :: MaxDims                                  ! Maximum number of time steps plus 2.
-INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
-INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
 INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
 
 
 LOGICAL                      :: Clockwise                                ! Flag to indicate clockwise rotation when looking downwind.
 
-LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
-LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
 LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
 LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
 LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used
-LOGICAL                      :: WrACT                                    ! Flag to output AeroDyn coherent turbulence
-LOGICAL                      :: WrADFF                                   ! Flag to output AeroDyn FF data (binary).
-LOGICAL                      :: WrADHH                                   ! Flag to output AeroDyn HH data (formatted).
-LOGICAL                      :: WrADTWR                                  ! Flag to output AeroDyn tower data (binary).
-LOGICAL                      :: WrBHHTP                                  ! Flag to output binary HH turbulence parameters.
-LOGICAL                      :: WrBLFF                                   ! Flag to output BLADED FF data (binary)
-LOGICAL                      :: WrFHHTP                                  ! Flag to output formatted HH turbulence parameters.
-LOGICAL                      :: WrFmtFF                                  ! Flag to output formatted FF data (Traditional SNLWIND-3D format).
+
+
+
+LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated
+  
 
 CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
 CHARACTER(200)               :: FormStr                                  ! String used to store format specifiers.
-CHARACTER(200)               :: FormStr1                                 ! String used to store format specifiers.
-CHARACTER(200)               :: FormStr2                                 ! String used to store format specifiers.
+
 CHARACTER(200)               :: InFile = 'TurbSim.inp'                   ! Root name of the I/O files.
-CHARACTER(  6)               :: RNG_type                                 ! Type of Random Number Generator to use
 CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
 CHARACTER( 50)               :: TMName                                   ! Turbulence model name.
 CHARACTER(  6)               :: TurbModel                                ! Turbulence model.
