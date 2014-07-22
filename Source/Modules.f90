@@ -301,6 +301,7 @@ REAL(ReKi), ALLOCATABLE      :: U_USR      (:)                           ! User-
 REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-specified wind direction profile, varying with height
 REAL(ReKi), ALLOCATABLE      :: L_USR      (:)                           ! User-specified von Karman length scale, varying with height
 REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
+REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
 
 INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
 REAL(ReKi), ALLOCATABLE      :: Freq_USR   (:)                           ! frequencies for the user-defined spectra
@@ -309,23 +310,16 @@ REAL(ReKi), ALLOCATABLE      :: Vspec_USR(:)                             ! user-
 REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
 
 
-REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
-REAL(ReKi)                   :: Sigma_U2                                 ! Standard Deviation of U velocity, squared.
-REAL(ReKi)                   :: Sigma_V2                                 ! Standard Deviation of V velocity, squared.
-REAL(ReKi)                   :: Sigma_W2                                 ! Standard Deviation of W velocity, squared.
-REAL(ReKi)                   :: H_ref                                    ! Height for reference wind speed.
+REAL(ReKi)                   :: RefHt                                    ! Height for reference wind speed.
 REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
 REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
-REAL(ReKi)                   :: U_Ref                                    ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
+REAL(ReKi)                   :: URef                                     ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
 
 
-
-!REAL(ReKi)                   :: RefHt                                    ! Reference height. ADDED BY Y.G.
-!REAL(ReKi)                   :: URef                                     ! Wind Speed at Reference Height. ADDED BY Y.G.
- REAL(ReKi)                   :: U0_1HR
+!REAL(ReKi)                   :: U0_1HR
 
 INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
 

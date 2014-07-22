@@ -24,7 +24,7 @@ RETURN
 
 END SUBROUTINE TS_Abort
 !=======================================================================
-SUBROUTINE TS_Warn ( Message, WrSum )
+SUBROUTINE TS_Warn ( Message, UnSum )
 
    ! This routine outputs non-fatal warning messages and returns to the calling routine.
 
@@ -32,8 +32,8 @@ SUBROUTINE TS_Warn ( Message, WrSum )
 
       ! Argument declarations.
 
-   CHARACTER(*), INTENT(IN)      :: Message                                      ! Warning message.
-   LOGICAL,      INTENT(IN)      :: WrSum                                        ! Whether to print a message in the sum file.
+   CHARACTER(*),   INTENT(IN)      :: Message                                      ! Warning message.
+   INTEGER(IntKi), INTENT(IN)      :: UnSum                                        ! Summary unit number: if > 0, will print a message in the sum file.
 
       ! Write the message to the screen
 
@@ -44,8 +44,8 @@ SUBROUTINE TS_Warn ( Message, WrSum )
 
       ! Write the message to the summary file if requested
 
-   IF ( WrSum ) THEN
-      WRITE (US, "(/'WARNING:  ', A / )") Message
+   IF ( UnSum > 0 ) THEN
+      WRITE (UnSum, "(/'WARNING:  ', A / )") Message
    ENDIF
 
 
