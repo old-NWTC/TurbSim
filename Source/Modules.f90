@@ -188,7 +188,25 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    
    type Meteorology_ParameterType
    
+      REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
+     !REAL(ReKi)                   :: h                                        ! Boundary layer depth
+      REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
+      REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
+      REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
+      REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
+      REAL(ReKi)                   :: L                                        ! M-O length
+      REAL(ReKi)                   :: ZL                                       ! A measure of stability
+      REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
+      REAL(ReKi)                   :: Ustar                                    ! Shear or friction velocity (m/s) -- rotor-disk average
+      REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
    
+
+         ! Coherence
+      REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
+      REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
+      REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
+      
+      
    end type Meteorology_ParameterType
    
    
@@ -246,31 +264,14 @@ CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter be
 REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
 REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
 
-REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
-REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
-REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
 
-REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
-REAL(ReKi)                   :: h                                        ! Boundary layer depth
-REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
-REAL(ReKi)                   :: Z0                                       ! Surface roughness length, meters
-REAL(ReKi)                   :: ZI                                       ! Mixing layer depth
-REAL(ReKi)                   :: Latitude                                 ! The site latitude in radians
-REAL(ReKi)                   :: L                                        ! M-O length
-REAL(ReKi)                   :: ZL                                       ! A measure of stability
-REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
 
 REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
 REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
 
 
-REAL(ReKi)                   :: Ustar                                    ! Shear or friction velocity (m/s) -- rotor-disk average
 REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
-REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
 !REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
-
-REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
-
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
 
@@ -311,12 +312,16 @@ REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-
 
 
 REAL(ReKi)                   :: RefHt                                    ! Height for reference wind speed.
+REAL(ReKi)                   :: URef                                     ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
+
 REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
+
+REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
 REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
+
 REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
-REAL(ReKi)                   :: URef                                     ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
 
 
 !REAL(ReKi)                   :: U0_1HR
@@ -329,9 +334,6 @@ LOGICAL                      :: Clockwise                                ! Flag 
 LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
 LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
 LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used
-
-
-
 LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated
   
 
