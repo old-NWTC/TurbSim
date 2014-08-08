@@ -156,6 +156,7 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       INTEGER(IntKi)               :: NumOutSteps                              ! Number of output time steps.
                   
       LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
+      LOGICAL                      :: Clockwise                                ! Flag to indicate clockwise rotation when looking downwind.
       
    end type TurbSim_GridParameterType
    
@@ -199,12 +200,33 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       REAL(ReKi)                   :: PLExp                                    ! Rotor disk power law exponent
       REAL(ReKi)                   :: Ustar                                    ! Shear or friction velocity (m/s) -- rotor-disk average
       REAL(ReKi)                   :: UstarDiab                                ! The diabatic ustar value
+      REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
+      REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
+      REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
    
+         ! coefficients for velocity and direction profiles (currently used with jet profiles only)
+      REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
+      REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
 
+      
+      REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
+      REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
+      
+      
          ! Coherence
       REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
       REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
       REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
+      
+      
+         ! Scaling
+      REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
+      REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
+      REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
+         
+      LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
+      LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
+      LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used
       
       
    end type Meteorology_ParameterType
@@ -254,6 +276,10 @@ INTEGER,    PARAMETER        :: UP       = 21                            ! I/O u
 LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 
 
+
+
+
+
 CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter because may be using -2 or -3 standards
                                 (/'IEC 61400-1 Ed. 1: 1993', &
                                   'IEC 61400-1 Ed. 2: 1999', &
@@ -261,23 +287,14 @@ CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter be
 
 
 
-REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
-REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
-
 
 
 REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
-REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
-
-
 REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
 !REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
 
 LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
 
-REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
-REAL(ReKi)                   :: PC_UV                                    ! u'v' cross-correlation coefficient
-REAL(ReKi)                   :: PC_VW                                    ! v'w' cross-correlation coefficient
 
 
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
@@ -317,11 +334,7 @@ REAL(ReKi)                   :: URef                                     ! The i
 REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 
-REAL(ReKi)                   :: ZJetMax                                  ! The height of the jet maximum (m)
-REAL(ReKi)                   :: UJetMax                                  ! The (horizontal) wind speed at the height of the jet maximum (m/s)
 
-REAL(ReKi)                   :: UstarOffset                              ! A scaling/offset value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
-REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
 
 
 !REAL(ReKi)                   :: U0_1HR
@@ -329,11 +342,7 @@ REAL(ReKi)                   :: UstarSlope                               ! A sca
 INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
 
 
-LOGICAL                      :: Clockwise                                ! Flag to indicate clockwise rotation when looking downwind.
 
-LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
-LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
-LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used
 LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated
   
 
