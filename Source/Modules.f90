@@ -48,6 +48,12 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    INTEGER(IntKi), PARAMETER :: NumFileFmt    =  8       ! TOTAL number of output file formats (used to dimension array)
    
    
+   REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
+   REAL(ReKi), PARAMETER        :: profileZmin =  50.                       ! Lower height limit for extrapolating GP_LLJ profiles of ustar and zl
+   REAL(ReKi), PARAMETER        :: Omega     = 7.292116E-05                 ! Angular speed of rotation of the earth (rad/s)
+   REAL(ReKi), PARAMETER        :: Tolerance = 0.0001                       ! The largest difference between two numbers that are assumed to be equal
+
+   
    
    CHARACTER(1),   PARAMETER ::  Comp (3) = (/ 'u', 'v', 'w' /)  ! The names of the wind components
    
@@ -120,7 +126,7 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    END TYPE CohStr_OutputType   
    
    
-   type :: TurbSim_GridParameterType
+   type :: Grid_ParameterType
       
       REAL(ReKi)                   :: GridHeight                               ! Grid height
       REAL(ReKi)                   :: GridRes_Z                                ! Distance between two consecutive vertical points on the grid (Vertical resolution)
@@ -158,7 +164,7 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       LOGICAL                      :: Periodic                                 ! Flag to indicate that output files must contain exactly one full (time) period
       LOGICAL                      :: Clockwise                                ! Flag to indicate clockwise rotation when looking downwind.
       
-   end type TurbSim_GridParameterType
+   end type Grid_ParameterType
    
    
    type IEC_ParameterType
@@ -191,6 +197,7 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    
       INTEGER(IntKi)               :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)      
       LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
+      CHARACTER(  3)               :: WindProfileType                          ! The wind profile type
       
       REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
      !REAL(ReKi)                   :: h                                        ! Boundary layer depth
@@ -214,6 +221,7 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
       !REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
 
+      
                   
       
          ! coefficients for velocity and direction profiles (currently used with jet profiles only)
@@ -277,7 +285,7 @@ use TurbSim_Types
 IMPLICIT                        NONE
 SAVE
 TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
-TYPE(TurbSim_GridParameterType)  :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
+TYPE(Grid_ParameterType)  :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
 TYPE(Meteorology_ParameterType)  :: p_met                       ! parameters for TurbSim 
 TYPE(IEC_ParameterType)          :: p_IEC                       ! parameters for IEC models
 TYPE(CohStr_ParameterType)       :: p_CohStr
@@ -288,17 +296,12 @@ TYPE(FFT_DataType)               :: FFT_Data
 TYPE(CohStr_OutputType)      :: y_CohStr
 
 
-REAL(ReKi), PARAMETER        :: profileZmax = 140.                       ! Upper height limit for extrapolating GP_LLJ profiles of ustar and zl
-REAL(ReKi), PARAMETER        :: profileZmin =  50.                       ! Lower height limit for extrapolating GP_LLJ profiles of ustar and zl
-REAL(ReKi), PARAMETER        :: Omega     = 7.292116E-05                 ! Angular speed of rotation of the earth (rad/s)
-REAL(ReKi), PARAMETER        :: Tolerance = 0.0001                       ! The largest difference between two numbers that are assumed to be equal
 
 
 
 
 INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
 
-INTEGER,    PARAMETER        :: UC       = 22                            ! I/O unit for Coherence debugging file.
 INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
 INTEGER,    PARAMETER        :: UP       = 21                            ! I/O unit for PSD debugging file.
 
@@ -334,23 +337,18 @@ REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The s
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 
 
-
-
 !REAL(ReKi)                   :: U0_1HR
 
 
-LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated
-  
+LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated 
 
 CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
-CHARACTER(200)               :: FormStr                                  ! String used to store format specifiers.
 
 CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
 
 
 CHARACTER( 50)               :: TMName                                   ! Turbulence model name.
 CHARACTER(  6)               :: TurbModel                                ! Turbulence model.
-CHARACTER(  3)               :: WindProfileType                          ! The wind profile type
 
 
 
