@@ -28,12 +28,12 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    INTEGER(IntKi), PARAMETER :: SpecModel_USRVKM = 13  ! user-specified scaling in von Karman model
    INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 14  ! User-defined spectra from file
    
-   
-   INTEGER(IntKi), PARAMETER :: IEC_ETM           = 1   ! Number to indicate the IEC Normal Turbulence Model
-   INTEGER(IntKi), PARAMETER :: IEC_EWM1          = 2   ! Number to indicate the IEC Extreme Wind speed Model (50-year)
-   INTEGER(IntKi), PARAMETER :: IEC_EWM50         = 3   ! Number to indicate the IEC Extreme Wind speed Model ( 1-year)
-   INTEGER(IntKi), PARAMETER :: IEC_EWM100        = 5   ! Number to indicate the IEC Extreme Wind speed Model ( 100-year)
-   INTEGER(IntKi), PARAMETER :: IEC_NTM           = 4   ! Number to indicate the IEC Extreme Turbulence Model
+      ! bjj: note that EWM models *MUST* directly follow ETM, and EWM models must be at the end
+   INTEGER(IntKi), PARAMETER :: IEC_NTM           = 1   ! Number to indicate the IEC Normal Turbulence Model
+   INTEGER(IntKi), PARAMETER :: IEC_ETM           = 2   ! Number to indicate the IEC Extreme Turbulence Model
+   INTEGER(IntKi), PARAMETER :: IEC_EWM1          = 3   ! Number to indicate the IEC Extreme Wind speed Model (  1-year)
+   INTEGER(IntKi), PARAMETER :: IEC_EWM50         = 4   ! Number to indicate the IEC Extreme Wind speed Model ( 50-year)
+   INTEGER(IntKi), PARAMETER :: IEC_EWM100        = 5   ! Number to indicate the IEC Extreme Wind speed Model (100-year)
    
    
       ! distinct output file formats (list by extension)
@@ -189,6 +189,9 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
    
    type Meteorology_ParameterType
    
+      INTEGER(IntKi)               :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)      
+      LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
+      
       REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
      !REAL(ReKi)                   :: h                                        ! Boundary layer depth
       REAL(ReKi)                   :: RICH_NO                                  ! Gradient Richardson number
@@ -204,6 +207,15 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       REAL(ReKi)                   :: UstarSlope                               ! A scaling/slope value used with the Ustar_profile to ensure that the mean hub u'w' and ustar inputs agree with the profile values
       REAL(ReKi)                   :: ZLoffset                                 ! An offset to align the zl profile with the mean zl input parameter
    
+      REAL(ReKi)                   :: RefHt                                    ! Height for reference wind speed.
+      REAL(ReKi)                   :: URef                                     ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
+      
+      REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
+      REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
+      !REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
+
+                  
+      
          ! coefficients for velocity and direction profiles (currently used with jet profiles only)
       REAL(ReKi)                   :: ChebyCoef_WS(11)                         ! The Chebyshev coefficients for wind speed
       REAL(ReKi)                   :: ChebyCoef_WD(11)                         ! The Chebyshev coefficients for wind direction
@@ -218,6 +230,8 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
       REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
       
+      LOGICAL                      :: IsIECModel                               ! Flag to determine if we're using IEC scaling (coherence, etc)
+      
       
          ! Scaling
       REAL(ReKi)                   :: PC_UW                                    ! u'w' cross-correlation coefficient
@@ -227,6 +241,22 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
       LOGICAL                      :: UVskip                                   ! Flag to determine if UV cross-feed term should be skipped or used
       LOGICAL                      :: UWskip                                   ! Flag to determine if UW cross-feed term should be skipped or used
       LOGICAL                      :: VWskip                                   ! Flag to determine if VW cross-feed term should be skipped or used
+      
+      
+         ! user-defined profiles (also used with UsrVKM model):      
+      INTEGER(IntKi)               :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
+      REAL(ReKi), ALLOCATABLE      :: USR_Z        (:)                         ! Heights of user-specified variables
+      REAL(ReKi), ALLOCATABLE      :: USR_U        (:)                         ! User-specified total wind speed, varying with height
+      REAL(ReKi), ALLOCATABLE      :: USR_WindDir  (:)                         ! User-specified wind direction profile, varying with height
+      REAL(ReKi), ALLOCATABLE      :: USR_Sigma    (:)                         ! User-specified standard deviation of the wind speed components (isotropic), varying with height
+      REAL(ReKi), ALLOCATABLE      :: USR_L        (:)                         ! User-specified von Karman length scale, varying with height
+      REAL(ReKi)                   :: USR_StdScale (3)                         ! Scaling for the user-specified standard deviation
+
+      INTEGER(IntKi)               :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
+      REAL(ReKi), ALLOCATABLE      :: USR_Freq     (:)                         ! frequencies for the user-defined spectra
+      REAL(ReKi), ALLOCATABLE      :: USR_Uspec    (:)                         ! user-defined u-component spectrum
+      REAL(ReKi), ALLOCATABLE      :: USR_Vspec    (:)                         ! user-defined v-component spectrum
+      REAL(ReKi), ALLOCATABLE      :: USR_Wspec    (:)                         ! user-defined w-component spectrum
       
       
    end type Meteorology_ParameterType
@@ -277,9 +307,6 @@ LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 
 
 
-
-
-
 CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter because may be using -2 or -3 standards
                                 (/'IEC 61400-1 Ed. 1: 1993', &
                                   'IEC 61400-1 Ed. 2: 1999', &
@@ -287,20 +314,9 @@ CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter be
 
 
 
-
-
-REAL(ReKi), ALLOCATABLE      :: ZL_profile(:)                            ! A profile of z/l (measure of stability with height)
-REAL(ReKi), ALLOCATABLE      :: Ustar_profile(:)                         ! A profile of ustar (measure of friction velocity with height)
-!REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
-
-LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
-
-
-
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
 REAL(ReKi)                   :: HH_HFlowAng                              ! Horizontal flow angle at the hub (may be different than HFlowAng if using direction profile).
 REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
-REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
 
 
 
@@ -311,25 +327,8 @@ REAL(ReKi), ALLOCATABLE      :: U           (:)                          ! The s
 REAL(ReKi), ALLOCATABLE      :: V           (:,:,:)                      ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
 REAL(ReKi), ALLOCATABLE      :: Work        (:,:)                        ! A temporary work array (NumSteps+2,3).
 
+REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
 
-
-INTEGER                      :: NumUSRz                                  ! Number of heights defined in the user-defined profiles.
-REAL(ReKi), ALLOCATABLE      :: Z_USR      (:)                           ! Heights of user-specified variables
-REAL(ReKi), ALLOCATABLE      :: U_USR      (:)                           ! User-specified total wind speed, varying with height
-REAL(ReKi), ALLOCATABLE      :: WindDir_USR    (:)                       ! User-specified wind direction profile, varying with height
-REAL(ReKi), ALLOCATABLE      :: L_USR      (:)                           ! User-specified von Karman length scale, varying with height
-REAL(ReKi), ALLOCATABLE      :: Sigma_USR  (:)                           ! User-specified standard deviation of the wind speed components (isotropic), varying with height
-REAL(ReKi)                   :: StdScale   (3)                           ! Scaling for the user-specified standard deviation
-
-INTEGER                      :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
-REAL(ReKi), ALLOCATABLE      :: Freq_USR   (:)                           ! frequencies for the user-defined spectra
-REAL(ReKi), ALLOCATABLE      :: Uspec_USR(:)                             ! user-defined u-component spectrum
-REAL(ReKi), ALLOCATABLE      :: Vspec_USR(:)                             ! user-defined v-component spectrum
-REAL(ReKi), ALLOCATABLE      :: Wspec_USR(:)                             ! user-defined w-component spectrum
-
-
-REAL(ReKi)                   :: RefHt                                    ! Height for reference wind speed.
-REAL(ReKi)                   :: URef                                     ! The input wind speed at the reference height.  (Added by M. Buhl for API profiles)
 
 REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
@@ -339,9 +338,6 @@ REAL(ReKi)                   :: UHub                                     ! Hub-h
 
 !REAL(ReKi)                   :: U0_1HR
 
-INTEGER                      :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)
-
-
 
 LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated
   
@@ -349,8 +345,9 @@ LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag 
 CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
 CHARACTER(200)               :: FormStr                                  ! String used to store format specifiers.
 
-CHARACTER(200)               :: InFile = 'TurbSim.inp'                   ! Root name of the I/O files.
 CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
+
+
 CHARACTER( 50)               :: TMName                                   ! Turbulence model name.
 CHARACTER(  6)               :: TurbModel                                ! Turbulence model.
 CHARACTER(  3)               :: WindProfileType                          ! The wind profile type
