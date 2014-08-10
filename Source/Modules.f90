@@ -226,6 +226,9 @@ LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
       !REAL(ReKi)                   :: TurbIntH20                               ! Turbulence intensity used for HYDRO module.
 
       
+      REAL(ReKi)                   :: HH_HFlowAng                              ! Horizontal flow angle at the hub (may be different than HFlowAng if using direction profile).
+      REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle
+      REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle
                   
       
          ! coefficients for velocity and direction profiles (currently used with jet profiles only)
@@ -309,9 +312,6 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
 INTEGER,    PARAMETER        :: UP       = 21                            ! I/O unit for PSD debugging file.
 
 
-REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
-REAL(ReKi)                   :: HH_HFlowAng                              ! Horizontal flow angle at the hub (may be different than HFlowAng if using direction profile).
-REAL(ReKi)                   :: VFlowAng                                 ! Vertical flow angle.
 
 
 
