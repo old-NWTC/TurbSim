@@ -292,7 +292,7 @@ use TurbSim_Types
 IMPLICIT                        NONE
 SAVE
 TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
-TYPE(Grid_ParameterType)  :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
+TYPE(Grid_ParameterType)         :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
 TYPE(Meteorology_ParameterType)  :: p_met                       ! parameters for TurbSim 
 TYPE(IEC_ParameterType)          :: p_IEC                       ! parameters for IEC models
 TYPE(CohStr_ParameterType)       :: p_CohStr
@@ -304,15 +304,8 @@ TYPE(CohStr_OutputType)      :: y_CohStr
 
 
 
-
-
-
 INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
 INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
-INTEGER,    PARAMETER        :: UP       = 21                            ! I/O unit for PSD debugging file.
-
-
-
 
 
 REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                      ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
@@ -320,7 +313,6 @@ REAL(ReKi), ALLOCATABLE      :: S           (:,:,:)                      ! The t
 REAL(ReKi), ALLOCATABLE      :: TRH         (:)                          ! The transfer function  matrix (NumSteps).
 REAL(ReKi), ALLOCATABLE      :: U           (:)                          ! The steady u-component wind speeds for the grid (ZLim).
 REAL(ReKi), ALLOCATABLE      :: V           (:,:,:)                      ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
-REAL(ReKi), ALLOCATABLE      :: Work        (:,:)                        ! A temporary work array (NumSteps+2,3).
 
 REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
 

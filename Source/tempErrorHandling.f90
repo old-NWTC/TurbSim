@@ -28,8 +28,6 @@ SUBROUTINE TS_Warn ( Message, UnSum )
 
    ! This routine outputs non-fatal warning messages and returns to the calling routine.
 
-   USE                              TSMods, ONLY:   US                           ! unit number for summary file
-
       ! Argument declarations.
 
    CHARACTER(*),   INTENT(IN)      :: Message                                      ! Warning message.
