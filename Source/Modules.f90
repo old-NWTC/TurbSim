@@ -4,10 +4,11 @@ MODULE TurbSim_Types
 use NWTC_Library
 use FFT_Module, only: FFT_DataType
 
-LOGICAL,    PARAMETER        :: COH_OUT  = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: DEBUG_OUT= .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: PSD_OUT  = .FALSE. !                     ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
-LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: COH_OUT   = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: DEBUG_OUT = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: PSD_OUT   = .FALSE. !                     ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: MVK       = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
+LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
 
 
    INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
@@ -189,15 +190,18 @@ LOGICAL,    PARAMETER        :: MVK      = .FALSE.                       ! This 
          
       CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic.
       CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class.
-      CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type            
+      CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type      
+      CHARACTER( 25)               :: IECeditionStr                            ! description of the IEC standard being used 
    end type IEC_ParameterType
    
    
    type Meteorology_ParameterType
    
-      INTEGER(IntKi)               :: SpecModel                                ! Integer value of spectral model (see SpecModel enum)      
+      INTEGER(IntKi)               :: TurbModel_ID                             ! Integer value of spectral model (see SpecModel enum)      
       LOGICAL                      :: KHtest                                   ! Flag to indicate that turbulence should be extreme, to demonstrate effect of KH billows
       CHARACTER(  3)               :: WindProfileType                          ! The wind profile type
+      CHARACTER(  6)               :: TurbModel                                ! Turbulence model
+      CHARACTER( 50)               :: TMName                                   ! Turbulence model name.
       
       REAL(ReKi)                   :: Fc                                       ! Coriolis parameter in units (1/sec)
      !REAL(ReKi)                   :: h                                        ! Boundary layer depth
@@ -301,20 +305,8 @@ TYPE(CohStr_OutputType)      :: y_CohStr
 
 
 INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
-
 INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
 INTEGER,    PARAMETER        :: UP       = 21                            ! I/O unit for PSD debugging file.
-
-
-LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
-
-
-
-CHARACTER( 23)               :: IECeditionStr (3) = &   ! BJJ not a parameter because may be using -2 or -3 standards
-                                (/'IEC 61400-1 Ed. 1: 1993', &
-                                  'IEC 61400-1 Ed. 2: 1999', &
-                                  'IEC 61400-1 Ed. 3: 2005'/)            ! The string description of the IEC 61400-1 standard being used
-
 
 
 REAL(ReKi)                   :: HFlowAng                                 ! Horizontal flow angle.
@@ -343,12 +335,8 @@ REAL(ReKi)                   :: UHub                                     ! Hub-h
 LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated 
 
 CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
-
 CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
 
-
-CHARACTER( 50)               :: TMName                                   ! Turbulence model name.
-CHARACTER(  6)               :: TurbModel                                ! Turbulence model.
 
 
 
