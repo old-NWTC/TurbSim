@@ -277,6 +277,18 @@ LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
    end type Meteorology_ParameterType
    
    
+   type TurbSim_ParameterType
+      LOGICAL                          :: WrFile(NumFileFmt)          ! Flag to determine which output files should be generated 
+                                       
+      CHARACTER(200)                   :: DescStr                     ! String used to describe the run (and the first line of the summary file)
+      CHARACTER(197)                   :: RootName                    ! Root name of the I/O files.
+      TYPE(RandNum_ParameterType)      :: RNG                         ! parameters for random numbers p_RandNum
+      TYPE(Grid_ParameterType)         :: grid                        ! parameters for TurbSim (specify grid/frequency size)
+      TYPE(Meteorology_ParameterType)  :: met                         ! parameters for TurbSim 
+      TYPE(IEC_ParameterType)          :: IEC                         ! parameters for IEC models
+               
+   end type
+   
    
    
    
@@ -287,14 +299,14 @@ MODULE TSMods
 
 USE                             NWTC_Library
 
+!bjj todo: replace progName, ProgVer, etc...
 use TurbSim_Types
 
 IMPLICIT                        NONE
 SAVE
-TYPE(RandNum_ParameterType)      :: p_RandNum                   ! parameters for random numbers
-TYPE(Grid_ParameterType)         :: p_grid                      ! parameters for TurbSim (specify grid/frequency size)
-TYPE(Meteorology_ParameterType)  :: p_met                       ! parameters for TurbSim 
-TYPE(IEC_ParameterType)          :: p_IEC                       ! parameters for IEC models
+
+TYPE( TurbSim_ParameterType )    :: p
+
 TYPE(CohStr_ParameterType)       :: p_CohStr
 
 TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
@@ -317,17 +329,13 @@ REAL(ReKi), ALLOCATABLE      :: V           (:,:,:)                      ! An ar
 REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
 
 
-REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim).
+REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim) [used in Hydro models only].
 REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
 
 
 !REAL(ReKi)                   :: U0_1HR
 
 
-LOGICAL                      :: WrFile(NumFileFmt)                       ! Flag to determine which output files should be generated 
-
-CHARACTER(200)               :: DescStr                                  ! String used to describe the run (and the first line of the summary file)
-CHARACTER(197)               :: RootName                                 ! Root name of the I/O files.
 
 
 
