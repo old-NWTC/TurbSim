@@ -2,13 +2,16 @@
 MODULE TurbSim_Types
 
 use NWTC_Library
-use FFT_Module, only: FFT_DataType
+
+TYPE(ProgDesc), PARAMETER    :: TurbSim_Ver = ProgDesc( 'TurbSim', 'v2.00.00a-bjj', '12-Aug-2014' )
 
 LOGICAL,    PARAMETER        :: COH_OUT   = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 LOGICAL,    PARAMETER        :: DEBUG_OUT = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 LOGICAL,    PARAMETER        :: PSD_OUT   = .FALSE. !                     ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 LOGICAL,    PARAMETER        :: MVK       = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
+
+INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
 
 
    INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
@@ -286,7 +289,11 @@ LOGICAL,    PARAMETER        :: PeriodicY = .FALSE. !.TRUE.
       TYPE(Grid_ParameterType)         :: grid                        ! parameters for TurbSim (specify grid/frequency size)
       TYPE(Meteorology_ParameterType)  :: met                         ! parameters for TurbSim 
       TYPE(IEC_ParameterType)          :: IEC                         ! parameters for IEC models
-               
+        
+   !bjj: there probably won't be a need for this later...      
+      REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
+      
+      
    end type
    
    
@@ -299,43 +306,21 @@ MODULE TSMods
 
 USE                             NWTC_Library
 
-!bjj todo: replace progName, ProgVer, etc...
 use TurbSim_Types
 
 IMPLICIT                        NONE
 SAVE
 
-TYPE( TurbSim_ParameterType )    :: p
-
 TYPE(CohStr_ParameterType)       :: p_CohStr
-
 TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
-TYPE(FFT_DataType)               :: FFT_Data
+TYPE(CohStr_OutputType)          :: y_CohStr
 
-TYPE(CohStr_OutputType)      :: y_CohStr
-
-
-
-INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
-INTEGER,    PARAMETER        :: UD       = 20                            ! I/O unit for debugging data.
-
-
-REAL(ReKi), ALLOCATABLE      :: PhaseAngles (:,:,:)                      ! The array that holds the random phases [number of points, number of frequencies, number of wind components=3].
-REAL(ReKi), ALLOCATABLE      :: S           (:,:,:)                      ! The turbulence PSD array (NumFreq,NPoints,3).
-REAL(ReKi), ALLOCATABLE      :: TRH         (:)                          ! The transfer function  matrix (NumSteps).
-REAL(ReKi), ALLOCATABLE      :: U           (:)                          ! The steady u-component wind speeds for the grid (ZLim).
-REAL(ReKi), ALLOCATABLE      :: V           (:,:,:)                      ! An array containing the summations of the rows of H (NumSteps,NPoints,3).
-
-REAL(ReKi), ALLOCATABLE      :: WindDir_profile(:)                       ! A profile of horizontal wind angle (measure of wind direction with height)
-
-
-REAL(ReKi), ALLOCATABLE      :: DUDZ       (:)                           ! The steady u-component wind shear for the grid (ZLim) [used in Hydro models only].
-REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
-
+TYPE( TurbSim_ParameterType )    :: p
 
 !REAL(ReKi)                   :: U0_1HR
 
 
+INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
 
 
 
