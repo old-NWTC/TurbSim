@@ -16,21 +16,22 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
 
    INTEGER(IntKi), PARAMETER :: MaxMsgLen = 1024 ! Maximum length of error messages
 
-   INTEGER(IntKi), PARAMETER :: SpecModel_NONE   =  0  ! No turbulence
-   INTEGER(IntKi), PARAMETER :: SpecModel_IECKAI =  1  ! IEC Kaimal
-   INTEGER(IntKi), PARAMETER :: SpecModel_IECVKM =  2  ! IEC von Karman 
-   INTEGER(IntKi), PARAMETER :: SpecModel_GP_LLJ =  3  ! Great Plains Low-Level Jet
-   INTEGER(IntKi), PARAMETER :: SpecModel_NWTCUP =  4  ! NWTC (upwind)
-   INTEGER(IntKi), PARAMETER :: SpecModel_SMOOTH =  5  ! Risoe Smooth-Terrain   
-   INTEGER(IntKi), PARAMETER :: SpecModel_WF_UPW =  6  ! Wind Farm Upwind
-   INTEGER(IntKi), PARAMETER :: SpecModel_WF_07D =  7  ! Wind Farm  7 rotor diameters downwind
-   INTEGER(IntKi), PARAMETER :: SpecModel_WF_14D =  8  ! Wind Farm 14 rotor diameters downwind
-   INTEGER(IntKi), PARAMETER :: SpecModel_TIDAL  =  9  ! Tidal (Hydro)
-   INTEGER(IntKi), PARAMETER :: SpecModel_RIVER  = 10  ! River (Hydro)
-   INTEGER(IntKi), PARAMETER :: SpecModel_API    = 11  ! API
-   INTEGER(IntKi), PARAMETER :: SpecModel_MODVKM = 12  ! user-specified scaling in von Karman model
-   INTEGER(IntKi), PARAMETER :: SpecModel_USRVKM = 13  ! user-specified scaling in von Karman model
-   INTEGER(IntKi), PARAMETER :: SpecModel_USER   = 14  ! User-defined spectra from file
+   INTEGER(IntKi), PARAMETER :: SpecModel_NONE    =  0  ! No turbulence
+   INTEGER(IntKi), PARAMETER :: SpecModel_IECKAI  =  1  ! IEC Kaimal
+   INTEGER(IntKi), PARAMETER :: SpecModel_IECVKM  =  2  ! IEC von Karman 
+   INTEGER(IntKi), PARAMETER :: SpecModel_GP_LLJ  =  3  ! Great Plains Low-Level Jet
+   INTEGER(IntKi), PARAMETER :: SpecModel_NWTCUP  =  4  ! NWTC (upwind)
+   INTEGER(IntKi), PARAMETER :: SpecModel_SMOOTH  =  5  ! Risoe Smooth-Terrain   
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_UPW  =  6  ! Wind Farm Upwind
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_07D  =  7  ! Wind Farm  7 rotor diameters downwind
+   INTEGER(IntKi), PARAMETER :: SpecModel_WF_14D  =  8  ! Wind Farm 14 rotor diameters downwind
+   INTEGER(IntKi), PARAMETER :: SpecModel_TIDAL   =  9  ! Tidal (Hydro)
+   INTEGER(IntKi), PARAMETER :: SpecModel_RIVER   = 10  ! River (Hydro)
+   INTEGER(IntKi), PARAMETER :: SpecModel_API     = 11  ! API
+   INTEGER(IntKi), PARAMETER :: SpecModel_MODVKM  = 12  ! user-specified scaling in von Karman model
+   INTEGER(IntKi), PARAMETER :: SpecModel_USRVKM  = 13  ! user-specified scaling in von Karman model
+   INTEGER(IntKi), PARAMETER :: SpecModel_USER    = 14  ! User-defined spectra from file
+   INTEGER(IntKi), PARAMETER :: SpecModel_TimeSer = 15  ! time series input from file
    
       ! bjj: note that EWM models *MUST* directly follow ETM, and EWM models must be at the end
    INTEGER(IntKi), PARAMETER :: IEC_NTM           = 1   ! Number to indicate the IEC Normal Turbulence Model
@@ -191,8 +192,8 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
                   
       LOGICAL                      :: NumTurbInp                               ! Flag to indicate if turbulence is user-specified (as opposed to IEC standard A, B, or C)
          
-      CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic.
-      CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class.
+      CHARACTER(  1)               :: IECTurbC                                 ! IEC turbulence characteristic
+      CHARACTER(  1)               :: IECTurbE                                 ! IEC Extreme turbulence class
       CHARACTER( 35)               :: IEC_WindDesc                             ! The description of the IEC wind type      
       CHARACTER( 25)               :: IECeditionStr                            ! description of the IEC standard being used 
    end type IEC_ParameterType
@@ -279,6 +280,19 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       
    end type Meteorology_ParameterType
    
+   TYPE UserTS_ParameterType
+   
+      logical                      :: containsW
+      integer(intKi)               :: nPoints    ! number of points in the time series input
+      integer(intKi)               :: nTimes     ! number of rows in the time series input
+      integer(intki), allocatable  :: pointID (:) ! not sure this is necessary
+      real(reki),     allocatable  :: pointyi (:) 
+      real(reki),     allocatable  :: pointzi (:) 
+      real(reki),     allocatable  :: t(:)
+      real(reki),     allocatable  :: v(:,:,:)     ! nTimes
+      
+   END TYPE UserTS_ParameterType
+   
    
    type TurbSim_ParameterType
       LOGICAL                          :: WrFile(NumFileFmt)          ! Flag to determine which output files should be generated 
@@ -289,7 +303,8 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       TYPE(Grid_ParameterType)         :: grid                        ! parameters for TurbSim (specify grid/frequency size)
       TYPE(Meteorology_ParameterType)  :: met                         ! parameters for TurbSim 
       TYPE(IEC_ParameterType)          :: IEC                         ! parameters for IEC models
-        
+      TYPE(UserTS_ParameterType)       :: usr                         ! parameters for user time-series input
+      
    !bjj: there probably won't be a need for this later...      
       REAL(ReKi)                   :: UHub                                     ! Hub-height (total) wind speed (m/s)
       
