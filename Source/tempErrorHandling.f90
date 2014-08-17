@@ -18,7 +18,7 @@ SUBROUTINE TS_Abort ( Message )
    WRITE (US, "('ABORTING PROGRAM.')" )
 
       ! Write the message to the screen
-   CALL ProgAbort ( Message )
+   CALL ProgAbort ( Message, .FALSE., 5.0_ReKi )
 
 RETURN
 
