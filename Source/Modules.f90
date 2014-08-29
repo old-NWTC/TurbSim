@@ -157,7 +157,10 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       INTEGER(IntKi),ALLOCATABLE   :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
       INTEGER(IntKi)               :: YLim                                     ! Number of horizontal positions in the grid
       INTEGER(IntKi)               :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
-      
+
+      INTEGER(IntKi)               :: HubIndx_Y                                ! Index into Y array for hub location
+      INTEGER(IntKi)               :: HubIndx_Z                                ! Index into Z array for hub location
+                        
       REAL(ReKi)                   :: AnalysisTime                             ! Analysis Time. (amount of time for analysis, allows user to perform analysis using one time length, but output UsableTime            
       REAL(ReKi)                   :: UsableTime                               ! Usable time.  Program adds GridWidth/MeanHHWS if not specified as "ALL"  AnalysisTime in input file.
       REAL(ReKi)                   :: TimeStep                                 ! Time step.
