@@ -149,7 +149,7 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       INTEGER(IntKi)               :: HubIndx                                  ! Index that tells where the hub point is in the V matrix
             
       REAL(ReKi)                   :: HubHt                                    ! Hub height.
-      LOGICAL                      :: ExtraHubPT                               ! Flag to indicate if the hub is on the regular grid or if an extra point must be added
+      LOGICAL                      :: HubOnGrid                                ! Flag to indicate if the hub is on the regular grid (true) or if an extra point must be added (false)
       LOGICAL                      :: ExtraTwrPT                               ! Flag to indicate if the tower is on the regular grid or if an extra point must be added
             
       REAL(ReKi),    ALLOCATABLE   :: Y          (:)                           ! The lateral locations of the points (YLim).
@@ -270,32 +270,28 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       REAL(ReKi), ALLOCATABLE      :: USR_Sigma    (:)                         ! User-specified standard deviation of the wind speed components (isotropic), varying with height
       REAL(ReKi), ALLOCATABLE      :: USR_L        (:)                         ! User-specified von Karman length scale, varying with height
       REAL(ReKi)                   :: USR_StdScale (3)                         ! Scaling for the user-specified standard deviation
-
-      INTEGER(IntKi)               :: NumUSRf                                  ! Number of frequencies in the user-defined spectra
-      REAL(ReKi), ALLOCATABLE      :: USR_Freq     (:)                         ! frequencies for the user-defined spectra
-      REAL(ReKi), ALLOCATABLE      :: USR_Spec     (:,:)                       ! user-defined spectrum for each component
-      
-      
+            
    end type Meteorology_ParameterType
+
    
-   TYPE UserTS_ParameterType
-   
+   TYPE UserTSSpec_ParameterType
+                     
       logical                      :: containsW
-      integer(intKi)               :: nFreq      ! number of frequencies in the calculated spectra
-      integer(intKi)               :: nPoints    ! number of points in the time series input
-      integer(intKi)               :: nTimes     ! number of rows in the time series input
-      integer(intki), allocatable  :: pointID (:) ! size: nPoints; not sure variable is necessary
-      real(reki),     allocatable  :: pointyi (:) ! y position where each time series was input; size: nPoints
-      real(reki),     allocatable  :: pointzi (:) ! z position (height) where each time series was input; size: nPoints
+      integer(intKi)               :: nFreq                                   ! number of frequencies in the calculated spectra
+      integer(intKi)               :: nPoints                                 ! number of points in the time series input
+      integer(intKi)               :: nTimes                                  ! number of rows in the time series input
+      integer(intki), allocatable  :: pointID (:)                             ! size: nPoints; not sure variable is necessary
+      real(reki),     allocatable  :: pointyi (:)                             ! y position where each time series was input; size: nPoints
+      real(reki),     allocatable  :: pointzi (:)                             ! z position (height) where each time series was input; size: nPoints
       real(reki),     allocatable  :: t(:)
-      real(reki),     allocatable  :: v(:,:,:)     ! velocity time series; size: nTimes, nPoints, { 2 if .not. containsW | 3 otherwise }
+      real(reki),     allocatable  :: v(:,:,:)                                ! velocity time series; size: nTimes, nPoints, { 2 if .not. containsW | 3 otherwise }
       
-      real(reKi),     allocatable  :: meanU(:,:)   ! mean velocity; size: nPoints, { 2 if .not. containsW | 3 otherwise }
-      real(reKi),     allocatable  :: S(:,:,:)     ! spectra;   size: nFreq, nPoints, { 2 if .not. containsW | 3 otherwise }
-      real(reKi),     allocatable  :: f(:)         ! frequency; size: nFreq
+      real(reKi),     allocatable  :: meanU(:,:)                              ! mean velocity; size: nPoints, { 2 if .not. containsW | 3 otherwise }
+      real(reKi),     allocatable  :: S(:,:,:)                                ! spectra;   size: nFreq, nPoints, { 2 if .not. containsW | 3 otherwise }
+      real(reKi),     allocatable  :: f(:)                                    ! frequency; size: nFreq
       real(reKi),     allocatable  :: phaseAngles(:,:,:)
       
-   END TYPE UserTS_ParameterType
+   END TYPE UserTSSpec_ParameterType
    
    
    type TurbSim_ParameterType
@@ -307,7 +303,7 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       TYPE(Grid_ParameterType)         :: grid                        ! parameters for TurbSim (specify grid/frequency size)
       TYPE(Meteorology_ParameterType)  :: met                         ! parameters for TurbSim 
       TYPE(IEC_ParameterType)          :: IEC                         ! parameters for IEC models
-      TYPE(UserTS_ParameterType)       :: usr                         ! parameters for user time-series input
+      TYPE(UserTSSpec_ParameterType)   :: usr                         ! parameters for user spectra or time-series input 
       
    !bjj: there probably won't be a need for this later...      
       REAL(ReKi)                       :: UHub                        ! Hub-height (total) wind speed (m/s)
