@@ -278,7 +278,7 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
    
    TYPE UserTSSpec_ParameterType
                      
-      logical                      :: containsW
+      integer(intKi)               :: nComp                                   ! number of velocity components in the file (1=u; 2=u&v; 3=u,v,w)
       integer(intKi)               :: nFreq                                   ! number of frequencies in the calculated spectra
       integer(intKi)               :: nPoints                                 ! number of points in the time series input
       integer(intKi)               :: nTimes                                  ! number of rows in the time series input
@@ -288,8 +288,8 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       real(reki),     allocatable  :: t(:)
       real(reki),     allocatable  :: v(:,:,:)                                ! velocity time series; size: nTimes, nPoints, { 2 if .not. containsW | 3 otherwise }
       
-      real(reKi),     allocatable  :: meanU(:,:)                              ! mean velocity; size: nPoints, { 2 if .not. containsW | 3 otherwise }
-      real(reKi),     allocatable  :: S(:,:,:)                                ! spectra;   size: nFreq, nPoints, { 2 if .not. containsW | 3 otherwise }
+      real(reKi),     allocatable  :: meanU(:,:)                              ! mean velocity; size: nPoints, nComp
+      real(reKi),     allocatable  :: S(:,:,:)                                ! spectra;   size: nFreq, nPoints, nComp
       real(reKi),     allocatable  :: f(:)                                    ! frequency; size: nFreq
       real(reKi),     allocatable  :: phaseAngles(:,:,:)
       
