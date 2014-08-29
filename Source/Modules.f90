@@ -3,7 +3,7 @@ MODULE TurbSim_Types
 
 use NWTC_Library
 
-TYPE(ProgDesc), PARAMETER    :: TurbSim_Ver = ProgDesc( 'TurbSim', 'v2.00.00a-bjj', '12-Aug-2014' )
+TYPE(ProgDesc), PARAMETER    :: TurbSim_Ver = ProgDesc( 'TurbSim', 'v2.00.00a-bjj', '29-Aug-2014' )
 
 LOGICAL,    PARAMETER        :: COH_OUT   = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
 LOGICAL,    PARAMETER        :: DEBUG_OUT = .FALSE.                       ! This parameter has been added to replace the NON-STANDARD compiler directive previously used
@@ -86,6 +86,9 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       TYPE(Event), POINTER      :: Next         => NULL()                   ! The next event to add
    END TYPE
 
+   
+   
+   
    TYPE     :: CohStr_ParameterType   
       REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
       REAL(ReKi)                   :: ScaleWid                        ! Scaling width for LE coherent turbulence (RotDiam in AeroDyn FD_Wind)
@@ -101,18 +104,13 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       REAL(ReKi)                   :: Ym_max                                   ! The nondimensional lateral width of the coherent turbulence dataset
       REAL(ReKi)                   :: Zm_max                                   ! The nondimensional vertical height of the coherent turbulence dataset
       
-      
-      REAL(ReKi),     ALLOCATABLE  :: pkCTKE     (:)                           ! Array containing the peak CTKE of each coherent event
-      REAL(ReKi),     ALLOCATABLE  :: EventLen   (:)                           ! The length of each event stored in EventStart() (non-dimensional time)
-      INTEGER(IntKi), ALLOCATABLE  :: EventID    (:)                           ! The timestep where the event starts, which determines the name of the event file
-      INTEGER(IntKi), ALLOCATABLE  :: EventTS    (:)                           ! The length of each event stored in EventStart() (number of timesteps)
-      INTEGER(IntKi)               :: NumEvents                                ! Number of events in the event data file (length of the Event* arrays)
-      
+            
       CHARACTER(200)               :: CTEventPath                              ! String used to store the name of the coherent event definition file
       CHARACTER(200)               :: CTEventFile                              ! String used to store the name of the coherent event definition file
       CHARACTER(  3)               :: CTExt                                    ! String used to determine the type of coherent structures ("dns" or "les")
 
    END TYPE CohStr_ParameterType
+   
 
    TYPE :: CohStr_OutputType
       REAL(ReKi)                   :: CTKE                                     ! Maximum predicted Coherent Turbulent Kenetic Energy at the center of the billow
@@ -142,6 +140,7 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       INTEGER(IntKi)               :: NumGrid_Y                                ! Grid dimension. (in horizontal direction)
 
       INTEGER(IntKi)               :: NPoints                                  ! Number of points being simulated.                        
+      INTEGER(IntKi)               :: NPacked                                  ! Number of entries stored in the packed version of the symmetric matrix of size NPoints by NPoints
       
       REAL(ReKi)                   :: Zbottom                                  ! The height of the lowest point on the grid (before tower points are added), equal to Z(1)
       REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
