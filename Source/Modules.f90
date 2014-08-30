@@ -154,7 +154,6 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       
       REAL(ReKi),    ALLOCATABLE   :: Y          (:)                           ! The lateral locations of the points (YLim).
       REAL(ReKi),    ALLOCATABLE   :: Z          (:)                           ! The vertical locations of the points (ZLim).
-      INTEGER(IntKi),ALLOCATABLE   :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
       INTEGER(IntKi)               :: YLim                                     ! Number of horizontal positions in the grid
       INTEGER(IntKi)               :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
       

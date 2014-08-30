@@ -1,7 +1,7 @@
 --------------TurbSim v2.00.* User Time Series Input File-----------------------
 Time series input from Y:/wind/windweb/MetData/135mData/M4Twr/20Hz/mat//2014/01/13/01134_17_40_00_013.mat. Using rotated series
 --------------------------------------------------------------------------------
- True        containsW  - Determines whether the time series data includes w-component winds (flag) [if false, w will be simulated using inputs in the main TurbSim input file]
+          3  nComp    - Number of velocity components in the file (1=u component only; 2=u & v components; 3=u,v,w) [if < 3 other components will be generated using values from input file]
           5  nPoints    - Number of time series points contained in this file (-)
 PointID   Pointyi     Pointzi     ! PointID is my current thought for a way to specify order of importance
    (-)     (m)         (m)
