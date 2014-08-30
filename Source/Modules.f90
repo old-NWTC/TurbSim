@@ -146,16 +146,20 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       REAL(ReKi)                   :: RotorDiameter                            ! The assumed diameter of the rotor
       
       INTEGER(IntKi)               :: HubIndx                                  ! Index that tells where the hub point is in the V matrix
-            
+      
       REAL(ReKi)                   :: HubHt                                    ! Hub height.
       LOGICAL                      :: HubOnGrid                                ! Flag to indicate if the hub is on the regular grid (true) or if an extra point must be added (false)
       LOGICAL                      :: ExtraTwrPT                               ! Flag to indicate if the tower is on the regular grid or if an extra point must be added
             
+      
       REAL(ReKi),    ALLOCATABLE   :: Y          (:)                           ! The lateral locations of the points (YLim).
       REAL(ReKi),    ALLOCATABLE   :: Z          (:)                           ! The vertical locations of the points (ZLim).
       INTEGER(IntKi),ALLOCATABLE   :: IYmax      (:)                           ! A temporary variable holding the maximum number of horizontal positions at each z
       INTEGER(IntKi)               :: YLim                                     ! Number of horizontal positions in the grid
       INTEGER(IntKi)               :: ZLim                                     ! Number of vertical positions in the grid, plus extra hub point (if necessary), plus tower points
+      
+      INTEGER(IntKi),ALLOCATABLE   :: GridPtIndx  (:)                          ! size is (NumGrid_Y * NumGrid_Z): The indices into the velocity array, indicating the points in the cartesian grid for output. Previously was assumed to be the first NumGrid_Y * NumGrid_Z points; now necessary because user-defined time series data may specifiy points on the grid.
+      INTEGER(IntKi),ALLOCATABLE   :: TwrPtIndx   (:)                          ! size is number of tower points: The indices into the velocity array, indicating the points to be put in the tower file for output. Previously was assumed to be the last NumTower points; now necessary because user-defined time series data may specifiy points on the tower.
 
       INTEGER(IntKi)               :: HubIndx_Y                                ! Index into Y array for hub location
       INTEGER(IntKi)               :: HubIndx_Z                                ! Index into Z array for hub location
