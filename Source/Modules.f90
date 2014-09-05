@@ -246,9 +246,11 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
       
       
          ! Coherence
-      REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent
-      REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements
-      REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters
+      REAL(ReKi)                   :: COHEXP                                   ! Coherence exponent for general spatial coherence model
+      REAL(ReKi)                   :: InCDec     (3)                           ! Contains the coherence decrements for general spatial coherence model
+      REAL(ReKi)                   :: InCohB     (3)                           ! Contains the coherence b/L (offset) parameters for general spatial coherence model
+      
+      INTEGER(IntKi)               :: SCMod      (3)                           ! SCMod_u, SCMod_v, and SCMod_w: switches determining which coherence model to use
       
       LOGICAL                      :: IsIECModel                               ! Flag to determine if we're using IEC scaling (coherence, etc)
       
@@ -297,7 +299,9 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
    
    type TurbSim_ParameterType
       LOGICAL                          :: WrFile(NumFileFmt)          ! Flag to determine which output files should be generated 
-                                       
+      INTEGER                          :: US  = -1                    ! I/O unit for summary file.
+              
+      
       CHARACTER(200)                   :: DescStr                     ! String used to describe the run (and the first line of the summary file)
       CHARACTER(197)                   :: RootName                    ! Root name of the I/O files.
       TYPE(RandNum_ParameterType)      :: RNG                         ! parameters for random numbers p_RandNum
@@ -317,31 +321,4 @@ INTEGER,    PARAMETER        :: UD       = 20                            ! I/O u
    
    
 END MODULE TurbSim_Types
-!==================================================================================================================================   
-MODULE TSMods
-
-USE                             NWTC_Library
-
-use TurbSim_Types
-
-IMPLICIT                        NONE
-SAVE
-
-TYPE(CohStr_ParameterType)       :: p_CohStr
-TYPE(RandNum_OtherStateType)     :: OtherSt_RandNum             ! other states for random numbers (next seed, etc)
-TYPE(CohStr_OutputType)          :: y_CohStr
-
-TYPE( TurbSim_ParameterType )    :: p
-
-!REAL(ReKi)                   :: U0_1HR
-
-
-INTEGER,    PARAMETER        :: US       = 3                             ! I/O unit for summary file.
-
-
-
-
-
-
-END MODULE TSMods
 !==================================================================================================================================   
