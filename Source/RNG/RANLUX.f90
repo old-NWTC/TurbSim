@@ -1,3 +1,4 @@
+! Borrowed from the v1.50 distributino of Turbsim
  Module Ran_Lux_Mod
 ! Subtract-and-borrow random number generator proposed by Marsaglia and Zaman, implemented by F. James with the name RCARRY in 1991,
 ! and later improved by Martin Luescher in 1993 to produce "Luxury Pseudorandom Numbers". Fortran 77 coded by F. James, 1993.
@@ -37,11 +38,12 @@
 ! NotYet is .TRUE. if no initialization has been performed yet.
 !Start bjj:  We want to write to the screen instead of "print *"
    use     SysSubs
+!  use precision
 !End bjj:
   implicit none
 
   integer, parameter :: NSeeds = 25, MaxLev = 4, LxDflt = 3
-  real, parameter :: TwoP12 = 4096.0
+  real(ReKi), parameter :: TwoP12 = 4096.0
   integer, parameter :: IGiga = 1000000000, JSDFlt = 314159265, ITwo24 = 2 ** 24, ICons = 2147483563
   integer :: I_ranLux
   integer, parameter :: Next(NSeeds - 1) = (/ NSeeds - 1, (I_ranLux, I_ranLux = 1, NSeeds - 2) /)  ! Table look-up (faster than Mod function).
@@ -49,15 +51,15 @@
   integer :: I24 = 24, J24 = 10, In24 = 0, Kount = 0, LuxLev = LxDflt, MKount = 0 ! Initialized variables are automatically saved.
   integer, dimension(0: MaxLev) :: NDSkip = (/ 0, 24, 73, 199, 365 /) ! Initialized variables are automatically saved.
   integer, save :: NSkip, InSeed
-  real :: Carry = 0.0 ! Initialized variables are automatically saved.
-  real, save :: Seeds(NSeeds - 1), TwoM24, TwoM12
+  real(ReKi) :: Carry = 0.0 ! Initialized variables are automatically saved.
+  real(ReKi), save :: Seeds(NSeeds - 1), TwoM24, TwoM12
   logical, save :: NotYet = .TRUE.
 
-  real :: Uni
+  real(ReKi) :: Uni
 
 !bjj
   character(300) :: RanLux_str
-!bjj  
+!bjj
 
   private :: RCarry
 
@@ -65,10 +67,10 @@ contains
 !============================================================================
   subroutine RanLux (RVec)
     ! Default Initialization by Multiplicative Congruential
-    real, intent(out) :: RVec(:)
+    real(ReKi), intent(out) :: RVec(:)
     integer :: ISeeds(NSeeds - 1), I, IVec, JSeed, K, LEnv, LP
 
-    real :: tmpTwoM24, tmpTwoM24Seed
+    real(ReKi) :: tmpTwoM24, tmpTwoM24Seed
 
 ! start subroutine RanLux
     LEnv = Size (RVec)
@@ -78,8 +80,8 @@ contains
       InSeed = JSeed
 !begin bjj
 !      print *, " RanLux default initialization: ", JSeed
-      write( RanLux_str, '(I12)' ) JSeed
-      CALL WrScr( " RanLux default initialization: "//TRIM( ADJUSTL( RanLux_str ) ) )
+!      write( RanLux_str, '(I12)' ) JSeed
+!      CALL WrScr( " RanLux default initialization: "//TRIM( ADJUSTL( RanLux_str ) ) )
 !end bjj
       LuxLev = LxDflt
       NSkip = NDSkip(LuxLev)
@@ -89,8 +91,8 @@ contains
       MKount = 0
 !begin bjj
 !      print *, " RanLux default luxury level = ", LuxLev, " p = ", LP
-      write( RanLux_str, '(A,I5,A,I12)' ) " RanLux default luxury level = ", LuxLev, " p = ", LP
-      CALL WrScr( TRIM( RanLux_str ) )
+!      write( RanLux_str, '(A,I5,A,I12)' ) " RanLux default luxury level = ", LuxLev, " p = ", LP
+!      CALL WrScr( TRIM( RanLux_str ) )
 !end bjj
 
       TwoM24 = 1.0
@@ -105,7 +107,7 @@ contains
       Seeds = Real (ISeeds) * TwoM24
       I24 = NSeeds - 1
       J24 = 10
-      Carry = Merge (TwoM24, 0.0, Seeds(NSeeds - 1) == 0.0)
+      Carry = Merge (TwoM24, 0.0_ReKi, Seeds(NSeeds - 1) == 0.0)
     end if
    
       !bjj added to speed up later calculations (b/c I had to fix the "where" statment)
@@ -163,7 +165,7 @@ contains
     if (NotYet) then
 !begin bjj
 !      print *, " Proper results only with initialisation from 25 integers obtained with RLuxUt"
-      CALL WrScr( " Proper results only with initialisation from 25 integers obtained with RLuxUt" )
+!      CALL WrScr( " Proper results only with initialisation from 25 integers obtained with RLuxUt" )
 !end bjj
       NotYet = .FALSE.
     end if
@@ -175,9 +177,9 @@ contains
 !Start bjj
 !    print *, " Full initialization of RanLux with 25 integers:"
 !    print *, ISDext
-    CALL WrScr ( " Full initialization of RanLux with 25 integers:" )    
-    write( RanLux_str, '(25(I11,1x))' ) ISDext    
-    CALL WrScr ( TRIM( RanLux_str ) )
+!    CALL WrScr ( " Full initialization of RanLux with 25 integers:" )
+!    write( RanLux_str, '(25(I11,1x))' ) ISDext
+!    CALL WrScr ( TRIM( RanLux_str ) )
 !End bjj
     Seeds = Real (ISDext(: NSeeds - 1)) * TwoM24
     Carry = 0.0
@@ -191,7 +193,7 @@ contains
     ISD = ISD / 100
     LuxLev = ISD
 
-!start bjj           
+!start bjj
    write( RanLux_str, "(I5)" ) LuxLev
 !end bjj
 
@@ -199,19 +201,19 @@ contains
       NSkip = NDSkip(LuxLev)
 !start bjj
 !      print *, " RanLux luxury level set by RLuxIn to: ", LuxLev\
-       CALL WrScr( " RanLux luxury level set by RLuxIn to: "//TRIM(ADJUSTL(RanLux_str) ))
+!       CALL WrScr( " RanLux luxury level set by RLuxIn to: "//TRIM(ADJUSTL(RanLux_str) ))
 !end bjj
     else if (LuxLev >= NSeeds - 1) then
       NSkip = LuxLev - NSeeds + 1
-!start bjj     
+!start bjj
 !      print *, " RanLux p-value set by RLuxIn to:", LuxLev
-      CALL WrScr( " RanLux p-value set by RLuxIn to: "//TRIM(ADJUSTL(RanLux_str) ))
+!      CALL WrScr( " RanLux p-value set by RLuxIn to: "//TRIM(ADJUSTL(RanLux_str) ))
 !end bjj
     else
       NSkip = NDSkip(MaxLev)
-!start bjj     
+!start bjj
 !      print *, " RanLux illegal luxury RLuxIn: ", LuxLev
-      CALL WrScr( " RanLux illegal luxury RLuxIn: "//TRIM(ADJUSTL(RanLux_str) ))
+!      CALL WrScr( " RanLux illegal luxury RLuxIn: "//TRIM(ADJUSTL(RanLux_str) ))
 !end bjj
       LuxLev = MaxLev
     end if
@@ -276,16 +278,16 @@ contains
       NSkip = NDSkip(LuxLev)
 !start bjj
 !      print *, " RanLux luxury level set by RLuxGo :", LuxLev, " p = ", NSkip + NSeeds - 1
-      write (RanLux_str, '(A,I5)') " RanLux luxury level set by RLuxGo :", LuxLev
-      write (RanLux_str, '(A,I12)') TRIM(RanLux_str)//" p = ", NSkip + NSeeds - 1
-      CALL WrScr( TRIM(RanLux_str) )
+!      write (RanLux_str, '(A,I5)') " RanLux luxury level set by RLuxGo :", LuxLev
+!      write (RanLux_str, '(A,I12)') TRIM(RanLux_str)//" p = ", NSkip + NSeeds - 1
+!      CALL WrScr( TRIM(RanLux_str) )
 !end bjj
     else
       NSkip = LuxLev - 24
 !start bjj
 !      print *, " RanLux p-value set by RLuxGo to:", LuxLev
-      write( RanLux_str, '(I20)' ) LuxLev
-      CALL WrScr( " RanLux p-value set by RLuxGo to: "//TRIM( ADJUSTL(RanLux_str ) ))
+!      write( RanLux_str, '(I20)' ) LuxLev
+!      CALL WrScr( " RanLux p-value set by RLuxGo to: "//TRIM( ADJUSTL(RanLux_str ) ))
 !end bjj
     end if
     In24 = 0
@@ -298,14 +300,14 @@ contains
       JSeed = Int
 !start bjj
 !      print *, " RanLux initialized by RLuxGo from Seeds", JSeed, K1, K2
-      write( RanLux_str, '(3(I12))' ) JSeed, K1, K2
-      CALL WrScr( " RanLux initialized by RLuxGo from Seeds"//TRIM( RanLux_str ) )
+!      write( RanLux_str, '(3(I12))' ) JSeed, K1, K2
+!      CALL WrScr( " RanLux initialized by RLuxGo from Seeds"//TRIM( RanLux_str ) )
 !end bjj
     else
       JSeed = JSDFlt
 !start bjj
 !      print *, " RanLux initialized by RLuxGo from default seed"
-      CALL WrScr( " RanLux initialized by RLuxGo from default seed" )
+!      CALL WrScr( " RanLux initialized by RLuxGo from default seed" )
 !end bjj
     end if
     InSeed = JSeed
@@ -322,7 +324,7 @@ contains
     Seeds = Real (ISeeds) * TwoM24
     I24 = NSeeds - 1
     J24 = 10
-    Carry = Merge (TwoM24, 0.0, Seeds(NSeeds - 1) == 0.0)
+    Carry = Merge (TwoM24, 0.0_ReKi, Seeds(NSeeds - 1) == 0.0)
 
     ! If restarting at a break point, skip K1 + IGIGA * K2
     ! Note that this is the number of numbers delivered to the user PLUS the number skipped (if Luxury > 0) .
@@ -354,7 +356,7 @@ contains
   end subroutine RLuxGo
 !============================================================================
   function RCarry (N) result (Uni)  ! Private (in module); generates a sequence of N uniform random numbers; returns the last one.
-    real :: Uni
+    real(ReKi) :: Uni
     integer, intent(in) :: N
     integer :: Many
 ! start function RCarry
