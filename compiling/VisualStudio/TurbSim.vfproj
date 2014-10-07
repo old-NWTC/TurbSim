@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VisualStudioProject ProjectCreator="Intel Fortran" Keyword="Console Application" Version="11.0" ProjectIdGuid="{9B76F7F4-E04F-4CAE-A34C-27F6FE973710}">
+	<Platforms>
+		<Platform Name="Win32"/></Platforms>
+	<Configurations>
+		<Configuration Name="Debug|Win32" OutputDirectory="..\..\bin">
+				<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" DebugInformationFormat="debugEnabled" Optimization="optimizeDisabled" Preprocess="preprocessYes" PreprocessorDefinitions="NO_MESHMAPPING" StandardWarnings="standardWarningsF03" DisableSpecificDiagnostics="5268" WarnInterfaces="true" Traceback="true" BoundsCheck="true" RuntimeLibrary="rtMultiThreadedDebug" UseMkl="mklSequential"/>
+				<Tool Name="VFLinkerTool" OutputFile="$(OutDir)\TurbSim_$(ConfigurationName)_$(PlatformName).exe" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" GenerateDebugInformation="true" SubSystem="subSystemConsole"/>
+				<Tool Name="VFResourceCompilerTool"/>
+				<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+				<Tool Name="VFCustomBuildTool"/>
+				<Tool Name="VFPreLinkEventTool"/>
+				<Tool Name="VFPreBuildEventTool"/>
+				<Tool Name="VFPostBuildEventTool"/>
+				<Tool Name="VFManifestTool" SuppressStartupBanner="true"/></Configuration>
+		<Configuration Name="Release|Win32" OutputDirectory="..\..\bin">
+				<Tool Name="VFFortranCompilerTool" SuppressStartupBanner="true" Preprocess="preprocessYes" PreprocessorDefinitions="NO_MESHMAPPING" StandardWarnings="standardWarningsF03" DisableSpecificDiagnostics="5268" UseMkl="mklSequential"/>
+				<Tool Name="VFLinkerTool" OutputFile="$(OutDir)\TurbSim_$(ConfigurationName)_$(PlatformName).exe" LinkIncremental="linkIncrementalNo" SuppressStartupBanner="true" SubSystem="subSystemConsole"/>
+				<Tool Name="VFResourceCompilerTool"/>
+				<Tool Name="VFMidlTool" SuppressStartupBanner="true"/>
+				<Tool Name="VFCustomBuildTool"/>
+				<Tool Name="VFPreLinkEventTool"/>
+				<Tool Name="VFPreBuildEventTool"/>
+				<Tool Name="VFPostBuildEventTool"/>
+				<Tool Name="VFManifestTool" SuppressStartupBanner="true"/></Configuration></Configurations>
+	<Files>
+		<Filter Name="Header Files" Filter="fi;fd"/>
+		<Filter Name="Resource Files" Filter="rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe"/>
+		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
+		<Filter Name="dependencies">
+		<Filter Name="NetLib">
+		<File RelativePath="..\..\Source\dependencies\NetLib\fftpack4.1.f">
+			<FileConfiguration Name="Debug|Win32">
+				<Tool Name="VFFortranCompilerTool" StandardWarnings="standardWarningsNone"/></FileConfiguration>
+			<FileConfiguration Name="Release|Win32">
+				<Tool Name="VFFortranCompilerTool" StandardWarnings="standardWarningsNone"/></FileConfiguration></File>
+		<File RelativePath="..\..\Source\dependencies\NetLib\NWTC_FFTPACK.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NetLib\NWTC_LAPACK.f90"/></Filter>
+		<Filter Name="NWTC_Library">
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\ModMesh.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\ModMesh_Types.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Base.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_IO.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Library.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Library_Types.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Num.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\SingPrec.f90"/>
+		<File RelativePath="..\..\Source\dependencies\NWTC_Library\SysIVF.f90"/></Filter>
+		<Filter Name="RanLux">
+		<File RelativePath="..\..\Source\dependencies\RNG\RANLUX.f90"/></Filter></Filter>
+		<Filter Name="TurbSim">
+		<File RelativePath="..\..\Source\BlankModVKM.f90"/>
+		<File RelativePath="..\..\Source\CohStructures.f90"/>
+		<File RelativePath="..\..\Source\Profiles.f90"/>
+		<File RelativePath="..\..\Source\RandNum.f90"/>
+		<File RelativePath="..\..\Source\Root_Searching.f90"/>
+		<File RelativePath="..\..\Source\TS_FileIO.f90"/>
+		<File RelativePath="..\..\Source\TSsubs.f90"/>
+		<File RelativePath="..\..\Source\TurbSim.f90"/>
+		<File RelativePath="..\..\Source\TurbSim_Types.f90"/>
+		<File RelativePath="..\..\Source\VelocitySpectra.f90"/></Filter></Filter></Files>
+	<Globals/></VisualStudioProject>
