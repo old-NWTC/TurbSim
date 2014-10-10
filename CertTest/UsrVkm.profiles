@@ -5,7 +5,7 @@ Made up profiles
 1.092           StdScale1      - u-component scaling factor for the input standard deviation
 1.0             StdScale2      - v-component scaling factor for the input standard deviation
 0.534           StdScale3      - w-component scaling factor for the input standard deviation
-...................................................................................
+-----------------------------------------------------------------------------------
 Height    Wind Speed       Wind --Direction--        Standard Deviation    Length Scale
  (m)        (m/s)       (deg, cntr-clockwise )            (m/s)              (m)
 -----------------------------------------------------------------------------------
