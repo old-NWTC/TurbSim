@@ -97,6 +97,6 @@ subplot(3,1,2); plot(t,uvw(:,2:3:end)); title('v');
 subplot(3,1,3); plot(t,uvw(:,3:3:end)); title('w');
     
 %% write input file
-writeTurbSimTimeSeriesInput(['meanDirRemoved' input_file], data_file, uvw, t, y, heights, 4);
+writeTurbSimTimeSeriesInput(['meanDirRemoved_' input_file], data_file, uvw, t, y, heights, 4);
 fclose all;
     

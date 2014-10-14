@@ -52,9 +52,9 @@ True          Clockwise       - Clockwise rotation looking downwind? (used only 
 "default"     PC_VW           - Hub mean v'w' Reynolds stress [m^2/s^2] (or "default" or "none")
 
 --------Spatial Coherence Parameters----------------------------
-default       SCMod1           - u-component coherence model ("GENERAL","IEC","API","NONE", or "default")
-default       SCMod2           - v-component coherence model ("GENERAL","NONE", or "default")
-default       SCMod3           - w-component coherence model ("GENERAL","NONE", or "default")
+GENERAL       SCMod1           - u-component coherence model ("GENERAL","IEC","API","NONE", or "default")
+GENERAL       SCMod2           - v-component coherence model ("GENERAL","NONE", or "default")
+GENERAL       SCMod3           - w-component coherence model ("GENERAL","NONE", or "default")
 "default"     InCDec1          - u-component coherence parameters for general or IEC models [-, m^-1] (e.g. "10.0  0.3e-3" in quotes) (or "default")
 "default"     InCDec2          - v-component coherence parameters for general or IEC models [-, m^-1] (e.g. "10.0  0.3e-3" in quotes) (or "default")
 "default"     InCDec3          - w-component coherence parameters for general or IEC models [-, m^-1] (e.g. "10.0  0.3e-3" in quotes) (or "default")
