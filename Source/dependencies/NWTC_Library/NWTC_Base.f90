@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013-2014  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2014-06-13 10:04:28 -0600 (Fri, 13 Jun 2014) $
-! (File) Revision #: $Rev: 237 $
+! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
+! (File) Revision #: $Rev: 294 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/NWTC_Base.f90 $
 !**********************************************************************************************************************************
 MODULE NWTC_Base
@@ -38,7 +38,8 @@ MODULE NWTC_Base
 
    INTEGER(IntKi), PARAMETER     :: ChanLen   = 10                                ! The allowable length of channel names (i.e., width of output columns) in the FAST framework
 
-   LOGICAL,PARAMETER             :: NWTC_VerboseComments = .TRUE.
+   INTEGER(IntKi), PARAMETER     :: NWTC_Verbose = 10
+   INTEGER(IntKi), PARAMETER     :: NWTC_VerboseLevel = 5  ! 0 = no output; 10=verbose; 
 
       ! Global Error-level variables:
 

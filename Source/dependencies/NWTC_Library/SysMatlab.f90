@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2014-06-13 10:04:28 -0600 (Fri, 13 Jun 2014) $
-! (File) Revision #: $Rev: 237 $
+! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
+! (File) Revision #: $Rev: 294 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/SysMatlab.f90 $
 !**********************************************************************************************************************************
 MODULE SysSubs
@@ -27,11 +27,17 @@ MODULE SysSubs
    ! This module contains routines with system-specific logic and references, including all references to the console unit, CU.
    ! It also contains standard (but not system-specific) routines it uses.
 
+   ! bjj: if compiling this to write to the Matlab command window using mexPrintf, you  must link with 
+   !     libmex.lib in the matlab/extern/lib/{architecture}/{compiler} folder
+   !      otherwise, use preprocessor definition CONSOLE_FILE to output everything to a file named CONSOLE.TXT
+   
 
    ! It contains the following routines:
 
    !     FUNCTION    FileSize( Unit )                                         ! Returns the size (in bytes) of an open file.
    !     SUBROUTINE  FlushOut ( Unit )
+   !     FUNCTION    NWTC_ERF( x )
+   !     FUNCTION    NWTC_gamma( x )
    !     SUBROUTINE  GET_CWD( DirName, Status )
    !     FUNCTION    Is_NaN( DblNum )                                         ! Please use IEEE_IS_NAN() instead
    !     FUNCTION    NWTC_Gamma( x )                                          ! Returns the gamma value of its argument.   
@@ -58,14 +64,21 @@ MODULE SysSubs
       MODULE PROCEDURE NWTC_gammaR8
       MODULE PROCEDURE NWTC_gammaR16
    END INTERFACE
+   
+   INTERFACE NWTC_ERF ! Returns the ERF value of its argument
+      MODULE PROCEDURE NWTC_ERFR4
+      MODULE PROCEDURE NWTC_ERFR8
+      MODULE PROCEDURE NWTC_ERFR16
+   END INTERFACE
+   
+   
 
 !=======================================================================
 
 
    INTEGER, PARAMETER            :: ConRecL     = 120                               ! The record length for console output.
-   INTEGER, PARAMETER            :: CU          = 7                                 ! The I/O unit for the console.  Unit 6 causes ADAMS to crash.
+   INTEGER, PARAMETER            :: CU          = 6                                 ! The I/O unit for the console.  Unit 6 causes ADAMS to crash.
    INTEGER, PARAMETER            :: MaxWrScrLen = 98                                ! The maximum number of characters allowed to be written to a line in WrScr
-   INTEGER, PARAMETER            :: NL_Len      = 2                                 ! The number of characters used for a new line.
 
    LOGICAL, PARAMETER            :: KBInputOK   = .FALSE.                           ! A flag to tell the program that keyboard input is allowed in the environment.
 
@@ -106,7 +119,7 @@ CONTAINS
 
 
 
-   Status = FSTAT( INT( Unit, 4 ), StatArray )
+   Status = FSTAT( INT( Unit, B4Ki ), StatArray )
 
    IF ( Status /= 0 ) THEN
       FileSize = -1
@@ -124,20 +137,18 @@ CONTAINS
       ! This subroutine flushes the buffer on the specified Unit.
       ! It is especially useful when printing "running..." type messages.
 
-
-   USE                             IFPORT
-
+#ifndef CONSOLE_FILE
+   USE                             IFPORT, ONLY: FLUSH
+#endif
 
       ! Argument declarations:
 
    INTEGER, INTENT(IN)          :: Unit                                         ! The unit number of the file being flushed.
 
 
-
+#ifndef CONSOLE_FILE
    CALL FLUSH ( INT(Unit, B4Ki) )
-!bjj: ADAMS does not compile well with this, so I'll put it back to the subroutine form:
-!   FLUSH ( Unit )
-
+#endif
 
    RETURN
    END SUBROUTINE FlushOut ! ( Unit )
@@ -148,7 +159,7 @@ CONTAINS
       ! This routine retrieves the path of the current working directory.
 
 
-   USE                             IFPORT
+   USE                             IFPORT, ONLY: GETCWD
 
    IMPLICIT                        NONE
 
@@ -172,8 +183,7 @@ CONTAINS
       ! It should be replaced with IEEE_IS_NAN in new code, but remains here for
       ! backwards compatibility.
 
-   USE                             IFPORT !remove with use of next line (not implemented in all versions of the IVF compiler)
-!  USE, INTRINSIC :: ieee_arithmetic
+  USE, INTRINSIC :: ieee_arithmetic
 
 
       ! Argument declarations.
@@ -187,12 +197,50 @@ CONTAINS
 
 
 
-!   Is_NaN = IEEE_IS_NAN( DblNum )
-  Is_NaN = IsNaN( DblNum )
+   Is_NaN = IEEE_IS_NAN( DblNum )
 
 
    RETURN
    END FUNCTION Is_NaN ! ( DblNum )
+!=======================================================================
+   FUNCTION NWTC_ERFR4( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(SiKi), INTENT(IN)     :: x           ! input 
+      REAL(SiKi)                 :: NWTC_ERFR4  ! result
+      
+      
+      NWTC_ERFR4 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR4
+!=======================================================================
+   FUNCTION NWTC_ERFR8( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(R8Ki), INTENT(IN)     :: x             ! input 
+      REAL(R8Ki)                 :: NWTC_ERFR8    ! result
+      
+      
+      NWTC_ERFR8 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR8
+!=======================================================================
+   FUNCTION NWTC_ERFR16( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(QuKi), INTENT(IN)     :: x             ! input 
+      REAL(QuKi)                 :: NWTC_ERFR16   ! result
+      
+      
+      NWTC_ERFR16 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR16
 !=======================================================================
    FUNCTION NWTC_GammaR4( x )
    
@@ -237,9 +285,23 @@ CONTAINS
 
 
       ! This routine opens the console for standard output.
+#ifdef CONSOLE_FILE
+      ! MODIFIED to write all text to an output file (see SUBROUTINE OpenFOutFile())
 
 
+      ! Local declarations.
 
+   INTEGER                      :: IOS                                          ! I/O status of OPEN.
+
+
+   OPEN ( CU , FILE='CONSOLE.TXT' , STATUS='UNKNOWN', FORM='FORMATTED', IOSTAT=IOS, ACTION="WRITE"   )
+
+   IF ( IOS /= 0 )  THEN
+!     CALL WrScr( ' Cannot open CONSOLE.TXT. Another program like MS Excel may have locked it for writing.' )
+      CALL ProgExit ( 1 )
+   END IF
+
+#endif
 
    RETURN
    END SUBROUTINE OpenCon
@@ -303,16 +365,9 @@ CONTAINS
 
    INTEGER, INTENT(IN)          :: StatCode                                      ! The status code to pass to the OS.
 
-   EXTERNAL                     :: mexErrMsgTxt                                  ! A MATLAB subroutine
-
-
-      ! Close the program
-   IF ( StatCode == 0 ) THEN        ! A normal stop
-      CALL mexErrMsgTxt( 'Normal stop.'//NewLine )    !I don't really want to call this error function.... Is there something else we could call?
-   ELSE                             ! an error occurred
-      CALL mexErrMsgTxt( 'Closing program.'//NewLine )
-   ENDIF
-
+#ifdef CONSOLE_FILE
+   CLOSE ( CU )
+#endif
 
    END SUBROUTINE ProgExit ! ( StatCode )
 !=======================================================================
@@ -362,11 +417,19 @@ CONTAINS
 
    CHARACTER(*), INTENT(IN)     :: Str                                          ! The string to write to the screen.
 
+#ifdef CONSOLE_FILE
+
+   WRITE (CU,'(1X,A)',ADVANCE='NO')  Str
+
+#else
    INTEGER                      :: Stat                                         ! Number of characters printed
    INTEGER, EXTERNAL            :: mexPrintF                                    ! Matlab function to print to the command window
+   CHARACTER(1024),SAVE         :: Str2                                         ! bjj: need static variable to print to Matlab command window
 
-   Stat = mexPrintF( ' '//TRIM(Str) )
-
+   Str2 = ' '//Str//C_NULL_CHAR  !bjj: not sure C_NULL_CHAR is necessary
+   Stat = mexPrintF( Str2 )
+   
+#endif
 
    RETURN
    END SUBROUTINE WrNR ! ( Str )
@@ -381,11 +444,8 @@ CONTAINS
 
    CHARACTER(*), INTENT(IN)     :: Str                                          ! The string to write to the screen.
 
-   INTEGER                      :: Stat
-   INTEGER, EXTERNAL            :: mexPrintF                                    ! Matlab function to print to the command window
-
-
    CALL WriteScr( Str, '(A)' )
+
 
 
    RETURN
@@ -405,10 +465,24 @@ CONTAINS
    CHARACTER(*), INTENT(IN)     :: Str                                         ! The input string to write to the screen.
    CHARACTER(*), INTENT(IN)     :: Frm                                         ! Format specifier for the output.
 
+#ifdef CONSOLE_FILE
+
+   INTEGER                      :: ErrStat                                      ! Error status of write operation (so code doesn't crash)
+
+
+   IF ( LEN_TRIM(Str)  < 1 ) THEN
+      WRITE ( CU, '()', IOSTAT=ErrStat )
+   ELSE
+      WRITE ( CU, Frm, IOSTAT=ErrStat ) TRIM(Str)
+   END IF
+
+#else
+
       ! Local variables
    INTEGER, EXTERNAL            :: mexPrintF                                   ! Matlab function to print to the command window
    INTEGER                      :: Stat                                        ! Number of characters printed to the screen
-   CHARACTER( LEN(Str) )        :: Str2                                        ! A temporary string (Str written with the Frm Format specification)
+
+   CHARACTER( 1024 ), SAVE      :: Str2   ! A temporary string (Str written with the Frm Format specification) (bjj: this apparently needs to be a static variable so it writes to the Matlab command window)
 
 
 
@@ -417,13 +491,17 @@ CONTAINS
    ELSE
       WRITE (Str2,Frm, IOSTAT=Stat)  ADJUSTL( Str )
    END IF
+   Str2 = trim(Str2)//NewLine//C_NULL_CHAR  !bjj: not sure C_NULL_CHAR is necessary
 
-   Stat = mexPrintf( TRIM(Str2)//NewLine )
+   Stat = mexPrintf( Str2 )
    !call mexEvalString("drawnow;");  ! !bjj: may have to call this to dump string to the screen immediately.
 
+#endif
 
    END SUBROUTINE WriteScr ! ( Str )
+
 !=======================================================================
+
 
 !==================================================================================================================================
 SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
@@ -432,7 +510,6 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
 
    USE               IFWINTY,  ONLY : HANDLE, LPVOID
    USE               kernel32, ONLY : LoadLibrary, GetProcAddress
-
 
       ! Passed Variables:
 
@@ -517,7 +594,6 @@ SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
    RETURN
 END SUBROUTINE FreeDynamicLib
 !==================================================================================================================================
-
 
 
 END MODULE SysSubs

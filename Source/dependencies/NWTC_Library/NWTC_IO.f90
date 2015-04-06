@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013-2014  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2014-09-26 19:57:49 -0600 (Fri, 26 Sep 2014) $
-! (File) Revision #: $Rev: 261 $
+! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
+! (File) Revision #: $Rev: 294 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/NWTC_IO.f90 $
 !**********************************************************************************************************************************
 MODULE NWTC_IO
@@ -35,7 +35,7 @@ MODULE NWTC_IO
 !=======================================================================
 
    TYPE(ProgDesc), PARAMETER    :: NWTC_Ver = &                               ! The name, version, and date of the NWTC Subroutine Library.
-                                    ProgDesc( 'NWTC Subroutine Library', 'v2.04.00a-bjj', '30-Sep-2014')
+                                    ProgDesc( 'NWTC Subroutine Library', 'v2.05.02a-bjj', '25-Feb-2015')
 
    TYPE, PUBLIC                 :: FNlist_Type                                ! This type stores a linked list of file names.
       CHARACTER(1024)                        :: FileName                      ! A file name.
@@ -72,7 +72,7 @@ MODULE NWTC_IO
 
    LOGICAL                       :: Beep     = .TRUE.                            ! Flag that specifies whether or not to beep for error messages and program terminations.
 
-   CHARACTER(20)                 :: ProgName = ' '                               ! The name of the calling program. DO NOT USE THIS IN NEW PROGRAMS
+   CHARACTER(20)                 :: ProgName = ' '                               ! The name of the calling program. DO NOT USE THIS IN NEW PROGRAMS (Modules)
    CHARACTER(99)                 :: ProgVer  = ' '                               ! The version (including date) of the calling program. DO NOT USE THIS IN NEW PROGRAMS
    CHARACTER(1), PARAMETER       :: Tab      = CHAR( 9 )                         ! The tab character.
 
@@ -329,7 +329,7 @@ CONTAINS
    !     SUBROUTINE ReadVar       ( UnIn, Fil, Var, VarName, VarDescr [, ErrStat] [, UnEc] )                 ! Generic interface for ReadCVar, ReadIVar, ReadLVar, and ReadR*Var.
    !     SUBROUTINE RemoveNullChar     ( Str )
    !     SUBROUTINE ScanComFile   ( FirstFile, ThisFile, LastFile, StartLine, LastLine, NumLines, ErrStat, ErrMsg )        ! Recursive routine to scan commented input files.
-   !     SUBROUTINE SetErrStat         ( ErrStatLcl, ErrMessLcl, ErrStat, ErrMess, RoutineName )
+   !     SUBROUTINE SetErrStat         ( ErrStatLcl, ErrMessLcl, ErrStat, ErrMess, RoutineName ) !note: moved to NWTC_Library_Types.f90
    !     SUBROUTINE Str2IntAry         ( Str, IntAry, ErrStat, ErrMsg )
    !     SUBROUTINE WaitTime      ( WaitSecs )
    !     SUBROUTINE WrBinFAST     ( FileName, FileID, DescStr, ChanName, ChanUnit, TimeData, AllOutData, ErrStat, ErrMsg )
@@ -2952,7 +2952,12 @@ CONTAINS
 
       IF ( PRESENT(ErrStat) ) THEN
          ErrStat = ErrID_Fatal
-         ErrMsg  = Msg
+         IF ( PRESENT(ErrMsg)  )  then
+            ErrMsg  = Msg
+         ELSE
+            CALL WrScr( ' OpenFOutFile:'//TRIM(Msg) )
+         END IF
+         
       ELSE
          CALL ProgAbort( ' '//Msg )
       END IF
@@ -4090,7 +4095,7 @@ CONTAINS
 
       CALL ChkParseData ( Words, ExpVarName, FileInfo%FileList(FileInfo%FileIndx(LineNum)) &
                         , FileInfo%FileLine(LineNum), NameIndx, ErrStatLcl, ErrMsg )
-      IF ( ErrStatLcl /= 0 )  THEN
+      IF ( ErrStatLcl /= ErrID_None )  THEN
          CALL ExitThisRoutine ( ErrID_Fatal, ErrMsg )
          RETURN
       ENDIF
@@ -6567,33 +6572,6 @@ SUBROUTINE ReadLine ( UnIn, CommChars, Line, LineLen, ErrStat )
       END SUBROUTINE ExitThisRoutine ! ( ErrID, Msg )
 
    END SUBROUTINE ScanComFile ! ( FileName, NumLines, NumFiles, ErrStat, ErrMsg )
-!=======================================================================
-   SUBROUTINE SetErrStat ( ErrStatLcl, ErrMessLcl, ErrStat, ErrMess, RoutineName )
-   
-      ! This routine sets the error status and error message for a routine      
-      !  that may set non-AbortErrLev errors. It concatenates error messages
-      !  and has the ability to provide a sort of traceback message of called
-      !  routines (if this is called consistently).
-      !  Modules in the FAST framework are recommend to use it.
-   
-      INTEGER(IntKi),                    INTENT(IN   )  :: ErrStatLcl   ! Error status of the operation
-      CHARACTER(*),                      INTENT(IN   )  :: ErrMessLcl   ! Error message if ErrStat /= ErrID_None
-                                                                        
-      INTEGER(IntKi),                    INTENT(INOUT)  :: ErrStat      ! Error status of the operation
-      CHARACTER(*),                      INTENT(INOUT)  :: ErrMess      ! Error message if ErrStat /= ErrID_None
-   
-      CHARACTER(*),                      INTENT(IN   )  :: RoutineName  ! Name of the routine error occurred in
-      
-   
-      IF ( ErrStatLcl /= ErrID_None ) THEN
-      
-         IF (ErrStat /= ErrID_None) ErrMess = TRIM(ErrMess)//NewLine
-         ErrMess = TRIM(ErrMess)//TRIM(RoutineName)//':'//TRIM(ErrMessLcl)         
-         ErrStat = MAX(ErrStat,ErrStatLcl)
-         
-      END IF
-         
-   END SUBROUTINE SetErrStat    
 !=======================================================================
    SUBROUTINE Str2IntAry( Str, IntAry, ErrStat, ErrMsg )
    

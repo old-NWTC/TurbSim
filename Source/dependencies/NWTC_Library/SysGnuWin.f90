@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2014-06-13 10:04:28 -0600 (Fri, 13 Jun 2014) $
-! (File) Revision #: $Rev: 237 $
+! File last committed: $Date: 2015-02-12 09:16:39 -0700 (Thu, 12 Feb 2015) $
+! (File) Revision #: $Rev: 289 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/SysGnuWin.f90 $
 !**********************************************************************************************************************************
 MODULE SysSubs
@@ -34,6 +34,8 @@ MODULE SysSubs
 
    !     FUNCTION    FileSize( Unit )                                         ! Returns the size (in bytes) of an open file.
    !     SUBROUTINE  FlushOut ( Unit )
+   !     FUNCTION    NWTC_ERF( x )
+   !     FUNCTION    NWTC_gamma( x )
    !     SUBROUTINE  GET_CWD( DirName, Status )
    !     FUNCTION    Is_NaN( DblNum )                                         ! Please use IEEE_IS_NAN() instead
    !     FUNCTION    NWTC_Gamma( x )                                          ! Returns the gamma value of its argument.   
@@ -60,8 +62,15 @@ MODULE SysSubs
       MODULE PROCEDURE NWTC_gammaR8
       MODULE PROCEDURE NWTC_gammaR16
    END INTERFACE
-
    
+   INTERFACE NWTC_ERF ! Returns the ERF value of its argument
+      MODULE PROCEDURE NWTC_ERFR4
+      MODULE PROCEDURE NWTC_ERFR8
+      MODULE PROCEDURE NWTC_ERFR16
+   END INTERFACE
+   
+   
+
 !=======================================================================
 
 
@@ -69,7 +78,6 @@ MODULE SysSubs
    INTEGER, PARAMETER            :: CU          = 6                                 ! The I/O unit for the console.  Unit 6 causes ADAMS to crash.
                                                                                     ! CU = 7 works on gfortran compiler version 4.6 and possibly 4.5. Fails on version 4.7 and 4.8 (see bugzilla bug report #445 for details)
    INTEGER, PARAMETER            :: MaxWrScrLen = 98                                ! The maximum number of characters allowed to be written to a line in WrScr
-   INTEGER, PARAMETER            :: NL_Len      = 2                                 ! The number of characters used for a new line.
 
    LOGICAL, PARAMETER            :: KBInputOK   = .TRUE.                            ! A flag to tell the program that keyboard input is allowed in the environment.
 
@@ -107,7 +115,7 @@ CONTAINS
 
 
 
-   Status = FSTAT( INT( Unit, 4 ), StatArray )
+   Status = FSTAT( INT( Unit, B4Ki ), StatArray )
 
    IF ( Status /= 0 ) THEN
       FileSize = -1
@@ -186,6 +194,45 @@ CONTAINS
    RETURN
    END FUNCTION Is_NaN ! ( DblNum )
 !=======================================================================
+   FUNCTION NWTC_ERFR4( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(SiKi), INTENT(IN)     :: x           ! input 
+      REAL(SiKi)                 :: NWTC_ERFR4  ! result
+      
+      
+      NWTC_ERFR4 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR4
+!=======================================================================
+   FUNCTION NWTC_ERFR8( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(R8Ki), INTENT(IN)     :: x             ! input 
+      REAL(R8Ki)                 :: NWTC_ERFR8    ! result
+      
+      
+      NWTC_ERFR8 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR8
+!=======================================================================
+   FUNCTION NWTC_ERFR16( x )
+   
+      ! Returns the ERF value of its argument. The result has a value equal  
+      ! to the error function: 2/pi * integral_from_0_to_x of e^(-t^2) dt. 
+
+      REAL(QuKi), INTENT(IN)     :: x             ! input 
+      REAL(QuKi)                 :: NWTC_ERFR16   ! result
+      
+      
+      NWTC_ERFR16 = ERF( x )
+   
+   END FUNCTION NWTC_ERFR16
+!=======================================================================
    FUNCTION NWTC_GammaR4( x )
    
       ! Returns the gamma value of its argument. The result has a value equal  
@@ -225,7 +272,7 @@ CONTAINS
    
    END FUNCTION NWTC_GammaR16
 !=======================================================================
- SUBROUTINE OpenCon
+   SUBROUTINE OpenCon
 
 
       ! This routine opens the console for standard output.  It is not needed for gfortran on Windows.

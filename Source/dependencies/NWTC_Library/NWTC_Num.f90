@@ -1,6 +1,6 @@
 !**********************************************************************************************************************************
 ! LICENSING
-! Copyright (C) 2013-2014  National Renewable Energy Laboratory
+! Copyright (C) 2013-2015  National Renewable Energy Laboratory
 !
 !    This file is part of the NWTC Subroutine Library.
 !
@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2014-09-23 09:09:18 -0600 (Tue, 23 Sep 2014) $
-! (File) Revision #: $Rev: 260 $
+! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
+! (File) Revision #: $Rev: 294 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/NWTC_Num.f90 $
 !**********************************************************************************************************************************
 MODULE NWTC_Num
@@ -38,6 +38,9 @@ MODULE NWTC_Num
    !  FUNCTION   CubicSplineInterpM    ( X, XAry, YAry, Coef, ErrStat, ErrMsg )                       ! Interpolate using cubic splines for multiple tables of irregularly space data.
    !  FUNCTION   EqualRealNos          ( ReNum1, ReNum2 )
    !  SUBROUTINE Eye                   ( A, ErrStat, ErrMsg )                                         ! sets A equal to the identity matrix (A can have 2 or 3 dimensions)
+   !  FUNCTION   DCM_exp               ( lambda )                         
+   !  SUBROUTINE DCM_logMap            ( DCM, logMap, ErrStat, ErrMsg )
+   !  SUBROUTINE DCM_SetLogMapForInterp( tensor )
    !  SUBROUTINE GaussElim             ( AugMat, NumEq, x, ErrStat, ErrMsg )                          ! Performs Gauss-Jordan elimination to solve Ax=b for x; AugMat = [A b]
    !  SUBROUTINE GetOffsetReg          ( Ary, NumPts, Val, Ind, Fract, ErrStat, ErrMsg )              ! Determine index of the point in Ary just below Val and the fractional distance to the next point in the array.
    !  FUNCTION   GetSmllRotAngs        ( DCMat, ErrStat, ErrMsg )
@@ -49,21 +52,35 @@ MODULE NWTC_Num
    !  FUNCTION   InterpStp             ( XVal, XAry, YAry, ILo, AryLen )                              ! Generic interface for InterpStpComp and InterpStpReal.
    !     FUNCTION   InterpStpComp      ( XVal, XAry, YAry, Ind, AryLen )
    !     FUNCTION   InterpStpReal      ( XVal, XAry, YAry, Ind, AryLen )
+   !  SUBROUTINE InterpStpReal2D       ( InCoord, Dataset, x, y, z, LastIndex, InterpData )
+   !  SUBROUTINE InterpStpReal3D       ( InCoord, Dataset, x, y,    LastIndex, InterpData )   
+   !  FUNCTION   InterpWrappedStpReal  ( XValIn, XAry, YAry, Ind, AryLen )
+   !  SUBROUTINE IsoparametricCoords   ( InCoord, posLo, posHi, isopc )
    !  FUNCTION   IsSymmetric           ( A )                                                          ! Function to determine if A(:,:) is symmetric
    !  SUBROUTINE LocateBin             ( XVal, XAry, Ind, AryLen )
    !  SUBROUTINE LocateStp             ( XVal, XAry, Ind, AryLen )
    !  FUNCTION   Mean                  ( Ary, AryLen )                                                ! Function to calculate the mean value of a vector array.
    !  SUBROUTINE MPi2Pi                ( Angle )
    !  FUNCTION   PSF                   ( N, NumPrimes )                                               ! This routine factors the number N into its primes.  
+   !  FUNCTION   Quaternion_Conjugate( q )
+   !  FUNCTION   Quaternion_Norm( q )
+   !  FUNCTION   Quaternion_Power( q, alpha )
+   !  FUNCTION   Quaternion_Product( p, q )
+   !  FUNCTION   Quaternion_to_DCM( q )
+   !  FUNCTION   DCM_to_Quaternion( DCM )
+   !  FUNCTION   Quaternion_Interp( q1, q2, s )
    !  SUBROUTINE RegCubicSplineInit    ( AryLen, XAry, YAry, DelX, Coef )                             ! Calculate coefficients for regularly spaced array to use cubic splines.
    !  SUBROUTINE RegCubicSplineInitM   ( XAry, YAry, DelX, Coef, ErrStat, ErrMsg )                    ! Interpolate using cubic splines for multiple tables of regularly space data.
    !  FUNCTION   RegCubicSplineInterp  ( X, AryLen, XAry, YAry, DelX, Coef )                          ! Interpolate a regularly spaced array using cubic splines.
    !  FUNCTION   RegCubicSplineInterpM ( X, XAry, YAry, DelX, Coef, ErrStat, ErrMsg )                 ! Initialize cubic splines for multiple tables of regularly space data.
    !  SUBROUTINE RombergInt            ( f, a, b, R, err, eps, ErrStat )
+   !  SUBROUTINE SetAnglesForInterp    ( angles )                                                     ! uses 2pi periodicity of angles to set angles for interpolation (makes sure no two adjacent entries are more than pi apart)
    !  SUBROUTINE SetConstants
    !  SUBROUTINE SmllRotTrans          ( RotationType, Theta1, Theta2, Theta3, TransMat, ErrTxt )
    !  SUBROUTINE SortUnion             ( Ary1, N1, Ary2, N2, Ary, N )
    !  FUNCTION   StdDevFn              ( Ary, AryLen, Mean )                                          ! Function to calculate the standard deviation of a vector array.
+   !  FUNCTION   trace                 ( A )                                                          ! computes the trace (sum of diagonal elements) of a matrix  (2-dimension array)
+   !  FUNCTION   TwoNorm               ( v )                                                          ! computes the l2 norm of a vector (1-dimension array) 
    !  SUBROUTINE Zero2TwoPi            ( Angle )
    
    USE                                          NWTC_IO
@@ -781,7 +798,214 @@ CONTAINS
       END SUBROUTINE ExitThisRoutine ! ( ErrID, Msg )
 
    END FUNCTION CubicSplineInterpM ! ( X, XAry, YAry, Coef, ErrStat, ErrMsg )
+!=======================================================================         
+   FUNCTION DCM_exp(lambda)
+   
+      ! This function computes a matrix exponential.
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 31-33
+      
+   REAL(ReKi), INTENT(IN)  :: lambda(3)
+   REAL(ReKi)              :: DCM_exp(3,3)
+   
+      ! local variables
+   REAL(ReKi)              :: theta          ! angle of rotation   
+   REAL(ReKi)              :: tmp_Mat(3,3)
+   
+   INTEGER(IntKi)          :: ErrStat
+   CHARACTER(30)           :: ErrMsg  
+   
+   
+   theta = TwoNorm(lambda)                   ! Eq. 32
+   
+
+   IF (EqualRealNos(theta, 0.0_ReKi) ) THEN    
+      CALL eye(DCM_exp, ErrStat, ErrMsg)    ! Eq. 33a
+   ELSE   
+      
+         ! convert lambda to skew-symmetric matrix:
+      tmp_mat(1,1) =  0.0_ReKi                                            
+      tmp_mat(2,1) = -lambda(3)                                           
+      tmp_mat(3,1) =  lambda(2)                                           
+      tmp_mat(1,2) =              lambda(3)                               
+      tmp_mat(2,2) =              0.0_ReKi                                
+      tmp_mat(3,2) =             -lambda(1)                               
+      tmp_mat(1,3) =                               -lambda(2)             
+      tmp_mat(2,3) =                                lambda(1)             
+      tmp_mat(3,3) =                                0.0_ReKi            
+      
+         ! Eq. 33b
+      CALL eye(DCM_exp, ErrStat, ErrMsg)                  
+      DCM_exp = DCM_exp + sin(theta)/theta*tmp_mat + (1-cos(theta))/theta**2 * MATMUL(tmp_mat, tmp_mat) 
+      
+   END IF
+
+   
+      
+   END FUNCTION DCM_exp
+!=======================================================================  
+   SUBROUTINE DCM_logMap(DCM, logMap, ErrStat, ErrMsg)
+
+      ! This function computes the logarithmic map for a direction 
+      ! cosine matrix.
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 24-30
+      ! with eigenvector equations updated to account for numerics
+   
+   REAL(ReKi),       INTENT(IN)    :: DCM(3,3)
+   REAL(ReKi),       INTENT(   OUT):: logMap(3)
+   INTEGER(IntKi),   INTENT(  OUT) :: ErrStat                   ! Error status of the operation
+   CHARACTER(*),     INTENT(  OUT) :: ErrMsg                    ! Error message if ErrStat /= ErrID_None
+   
+      ! local variables
+   REAL(ReKi)                      :: temp
+   REAL(ReKi)                      :: theta
+   REAL(ReKi)                      :: v(3)
+   REAL(ReKi)                      :: skewSym(3,3) ! an anti-symmetric matrix
+      
+         ! initialization
+      ErrStat = ErrID_None
+      ErrMsg  = ""   
+   
+   
+      temp  = 0.5_ReKi*( trace(DCM) - 1.0_ReKi )
+      temp  = min( max(temp,-1.0_ReKi), 1.0_ReKi ) !make sure it's in a valid range (to avoid cases where this is slightly outside the +/-1 range)
+      theta = ACOS( temp )                                                      ! Eq. 25
+   
+      IF ( EqualRealNos(0.0_ReKi, theta) ) THEN
+         logMap = 0.0_ReKi                                                   ! Eq. 26a
+      ELSEIF ( EqualRealNos( pi, theta ) ) THEN
+      
+         ! calculate the eigenvector of DCM associated with eigenvalue +1:
+      
+         temp = -1.0_ReKi + DCM(2,2) + DCM(2,3)*DCM(3,2) + DCM(3,3) - DCM(2,2)*DCM(3,3)
+         if ( .NOT. EqualRealNos(temp, 0.0_ReKi) ) then
+
+            v(1) = 1.0_ReKi
+            v(2) = -(DCM(2,1) + DCM(2,3)*DCM(3,1) - DCM(2,1)*DCM(3,3))/temp
+            v(3) = -(DCM(3,1) - DCM(2,2)*DCM(3,1) + DCM(2,1)*DCM(3,2))/temp
+
+         else 
+            temp = -1.0_ReKi + DCM(1,1) + DCM(1,3)*DCM(3,1) + DCM(3,3) - DCM(1,1)*DCM(3,3)
+            if ( .NOT. EqualRealNos(temp, 0.0_ReKi) ) then
+
+               v(1) = -(DCM(1,2) + DCM(1,3)*DCM(3,2) - DCM(1,2)*DCM(3,3))/temp
+               v(2) =  1.0_ReKi
+               v(3) = -(DCM(3,2) + DCM(1,2)*DCM(3,1) - DCM(1,1)*DCM(3,2))/temp
+
+            else 
+               temp = -1.0_ReKi + DCM(1,1) + DCM(1,2)*DCM(2,1) + DCM(2,2) - DCM(1,1)*DCM(2,2)
+               if ( .NOT. EqualRealNos(temp, 0.0_ReKi) ) then
+
+                  v(1) = -(DCM(1,3) - DCM(1,3)*DCM(2,2) + DCM(1,2)*DCM(2,3))/temp
+                  v(2) = -(DCM(1,3)*DCM(2,1) + DCM(2,3) - DCM(1,1)*DCM(2,3))/temp
+                  v(3) = 1.0_ReKi
+            
+               else
+                     ! break with error
+                  ErrStat = ErrID_Fatal
+                  WRITE( ErrMsg, '("DCM_logMap:invalid DCM matrix",3("'//Newline//'",4x,3(ES10.3E2,1x)))') DCM(1,:),DCM(2,:),DCM(3,:)               
+                  RETURN
+               end if         
+            end if         
+         endif
+                         
+            ! normalize the eigenvector:
+         v = v / TwoNorm(v)                                                       ! Eq. 27                  
+      
+            ! calculate the skew-symmetric tensor (note we could change sign here for continuity)
+         v =  pi*v                                                                ! Eq. 26c  
+      
+         logMap(1) = -v(1)
+         logMap(2) =  v(2)
+         logMap(3) = -v(3)
+      
+      ELSE ! 0 < theta < pi 
+      
+         skewSym = DCM - TRANSPOSE(DCM)
+      
+         logMap(1) = -skewSym(3,2)
+         logMap(2) =  skewSym(3,1)
+         logMap(3) = -skewSym(2,1)
+      
+         logMap = 0.5_ReKi * theta / sin(theta) * logMap   ! Eq. 26b
+      END IF
+   
+   END SUBROUTINE DCM_logMap   
 !=======================================================================
+SUBROUTINE DCM_SetLogMapForInterp( tensor )
+
+   ! this routine sets the rotation parameters (tensors from DCM_logMap)
+   ! so that they can be appropriately interpolated, based on
+   ! continunity of the neighborhood. The tensor input matrix has columns
+   ! of rotational parameters; one column for each set of values to be 
+   ! interpolated
+   !
+   ! This is based on the 2pi periodicity of rotations:
+   ! if tensor is one solution to DCM_logMap( DCM ), then so is
+   !  tensor*( 1 + TwoPi*k/TwoNorm(tensor) ) for any integer k
+      
+   
+   REAL(ReKi),     INTENT(INOUT) :: tensor(:,:)
+
+   REAL(ReKi)                    :: diff1, diff2      ! magnitude-squared of difference between two adjacent values
+   REAL(ReKi)                    :: temp(3), temp1(3) ! difference between two tensors
+   REAL(ReKi)                    :: period(3)         ! the period to add to the rotational parameters
+   INTEGER(IntKi)                :: nc                ! size of the tensors matrix
+   INTEGER(IntKi)                :: ic, k             ! loop counters for each array dimension
+   
+   nc = size(tensor,2)
+          
+      ! 
+   do ic=2,nc      
+      
+      diff1 = TwoNorm( tensor(:,ic) )
+      
+      if ( .NOT. EqualRealNos( diff1, 0.0_ReKi) ) then
+            ! check if we're going around a 2pi boundary:
+      
+         period = tensor(:,ic) * ( Twopi/diff1 )
+      
+         temp1 = tensor(:,ic-1) - tensor(:,ic)
+         diff1 = DOT_PRODUCT( temp1, temp1 )
+                            
+            ! try for k < 0
+         temp = temp1 + period !k=-1; 
+         diff2 = DOT_PRODUCT( temp, temp )
+      
+         if (diff2 < diff1) then
+         
+            do while (diff2 < diff1)
+               tensor(:,ic) = tensor(:,ic) - period  !k=k-1
+                              
+               diff1 = diff2
+               temp  = temp1 + period !k=k-1; 
+               diff2 = DOT_PRODUCT( temp, temp )
+            end do
+         
+         else
+            ! try for k > 0
+         
+               ! check if the new value is too small:
+            temp = temp1 - period !k=+1; 
+            diff2 = DOT_PRODUCT( temp, temp )
+            
+            do while (diff2 < diff1)
+               tensor(:,ic) = tensor(:,ic) + period  !k=k+1
+
+               diff1 = diff2
+               temp  = temp1 + period !k=k-1; 
+               diff2 = DOT_PRODUCT( temp, temp )
+            end do
+   
+         end if
+      
+      end if ! tensor vector isn't zero=length
+            
+   end do
+                 
+END SUBROUTINE DCM_SetLogMapForInterp
+!=======================================================================     
    FUNCTION EqualRealNos4 ( ReNum1, ReNum2 )
 
       ! This function compares 2 real numbers and determines if they
@@ -1731,7 +1955,289 @@ CONTAINS
 
    RETURN
    END FUNCTION InterpStpReal ! ( XVal, XAry, YAry, Ind, AryLen )
+
 !=======================================================================
+!< This routine linearly interpolates Dataset. It is
+!! set for a 2-d interpolation on x and y of the input point.
+!! x and y must be in increasing order. Each dimension may contain only 1 value.
+!! The method is described in this paper: 
+!!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+SUBROUTINE InterpStpReal2D( InCoord, Dataset, x, y, LastIndex, InterpData )
+
+   INTEGER, PARAMETER :: NumDimensions = 2
+
+      ! I/O variables
+
+   REAL(ReKi),                     INTENT(IN   ) :: InCoord(NumDimensions)                       !< Arranged as (x, y)
+   REAL(ReKi),                     INTENT(IN   ) :: Dataset(:,:)                                 !< Arranged as (x, y)
+   REAL(ReKi),                     INTENT(IN   ) :: x(:)                                         !< first dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: y(:)                                         !< second dimension in increasing order
+   INTEGER(IntKi),                 INTENT(INOUT) :: LastIndex(NumDimensions)                     !< Index for the last (x, y) used
+   REAL(ReKi),                     INTENT(  OUT) :: InterpData                                   !< The interpolated value of Dataset(:,:) at InCoord
+
+
+      ! Local variables
+
+   INTEGER(IntKi)                                :: Indx_Lo(NumDimensions)                       ! index associated with lower bound of dimension 1,2 where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   INTEGER(IntKi)                                :: Indx_Hi(NumDimensions)                       ! index associated with upper bound of dimension 1,2 where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   REAL(ReKi)                                    :: Pos_Lo(NumDimensions)                        ! coordinate value with lower bound of dimension 1,2
+   REAL(ReKi)                                    :: Pos_Hi(NumDimensions)                        ! coordinate value with upper bound of dimension 1,2
+
+   REAL(ReKi)                                    :: isopc(NumDimensions)                         ! isoparametric coordinates
+
+   REAL(ReKi)                                    :: N(2**NumDimensions)                          ! size 2^n
+   REAL(ReKi)                                    :: u(2**NumDimensions)                          ! size 2^n
+
+   INTEGER(IntKi)                                :: nx, ny
+
+
+      ! find the indices into the arrays representing coordinates of each dimension:
+      !  (by using LocateStp, we do not require equally spaced arrays)
+
+   nx = SIZE(x)
+   ny = SIZE(y)
+
+   CALL LocateStp( InCoord(1), x, LastIndex(1), nx )
+   CALL LocateStp( InCoord(2), y, LastIndex(2), ny )
+
+   Indx_Lo = LastIndex  ! at this point, 0 <= Indx_Lo(i) <= n(i) for all i
+
+
+   ! x (indx 1)
+   IF (Indx_Lo(1) == 0) THEN
+      Indx_Lo(1) = 1
+   ELSEIF (Indx_Lo(1) == nx ) THEN
+      Indx_Lo(1) = max( nx - 1, 1 )                ! make sure it's a valid index
+   END IF
+   Indx_Hi(1) = min( Indx_Lo(1) + 1 , nx )         ! make sure it's a valid index
+
+   ! y (indx 2)
+   IF (Indx_Lo(2) == 0) THEN
+      Indx_Lo(2) = 1
+   ELSEIF (Indx_Lo(2) == ny ) THEN
+      Indx_Lo(2) = max( ny - 1, 1 )                ! make sure it's a valid index
+   END IF
+   Indx_Hi(2) = min( Indx_Lo(2) + 1 , ny )         ! make sure it's a valid index
+
+
+      ! calculate the bounding box; the positions of all dimensions:
+
+   pos_Lo(1) = x( Indx_Lo(1) )
+   pos_Hi(1) = x( Indx_Hi(1) )
+
+   pos_Lo(2) = y( Indx_Lo(2) )
+   pos_Hi(2) = y( Indx_Hi(2) )
+
+
+      ! 2-D linear interpolation:
+
+   CALL IsoparametricCoords( InCoord, pos_Lo, pos_Hi, isopc )      ! Calculate iospc
+
+   N(1)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )
+   N(2)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )
+   N(3)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )
+   N(4)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )
+   N     = N / REAL( SIZE(N), ReKi )  ! normalize
+
+
+   u(1)  = Dataset( Indx_Hi(1), Indx_Lo(2) )
+   u(2)  = Dataset( Indx_Hi(1), Indx_Hi(2) )
+   u(3)  = Dataset( Indx_Lo(1), Indx_Hi(2) )
+   u(4)  = Dataset( Indx_Lo(1), Indx_Lo(2) )
+
+   InterpData = SUM ( N * u )
+
+
+END SUBROUTINE InterpStpReal2D   
+!=======================================================================
+!< This routine linearly interpolates Dataset. It is set for a 3-d 
+!! interpolation on x and y of the input point. x, y, and z must be 
+!! in increasing order. Each dimension may contain only 1 value.
+!! The method is described in this paper: 
+!!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+SUBROUTINE InterpStpReal3D( InCoord, Dataset, x, y, z, LastIndex, InterpData )
+! This routine linearly interpolates Dataset. It is set for a 3-d 
+! interpolation on x and y of the input point. x, y, and z must be 
+! in increasing order. Each dimension may contain only 1 value.
+! The method is described in this paper: 
+!   http://www.colorado.edu/engineering/CAS/courses.d/AFEM.d/AFEM.Ch11.d/AFEM.Ch11.pdf
+
+   INTEGER, PARAMETER :: NumDimensions = 3
+
+      ! I/O variables
+
+   REAL(ReKi),                     INTENT(IN   ) :: InCoord(NumDimensions)                       !< Arranged as (x, y, z)
+   REAL(ReKi),                     INTENT(IN   ) :: Dataset(:,:,:)                               !< Arranged as (x, y, z)
+   REAL(ReKi),                     INTENT(IN   ) :: x(:)                                         !< first dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: y(:)                                         !< second dimension in increasing order
+   REAL(ReKi),                     INTENT(IN   ) :: z(:)                                         !< third dimension in increasing order
+   INTEGER(IntKi),                 INTENT(INOUT) :: LastIndex(NumDimensions)                     !< Index for the last (x, y, z) used
+   REAL(ReKi),                     INTENT(  OUT) :: InterpData                                   !< The interpolated value of Dataset(:,:,:) at InCoord
+
+
+      ! Local variables
+
+   INTEGER(IntKi)                                :: Indx_Lo(NumDimensions)                       ! index associated with lower bound of dimension i where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   INTEGER(IntKi)                                :: Indx_Hi(NumDimensions)                       ! index associated with upper bound of dimension i where val(Indx_lo(i)) <= InCoord(i) <= val(Indx_hi(i))
+   REAL(ReKi)                                    :: Pos_Lo(NumDimensions)                        ! coordinate value with lower bound of dimension i
+   REAL(ReKi)                                    :: Pos_Hi(NumDimensions)                        ! coordinate value with upper bound of dimension i
+
+   REAL(ReKi)                                    :: isopc(NumDimensions)                         ! isoparametric coordinates
+
+   REAL(ReKi)                                    :: N(2**NumDimensions)                          ! size 2^NumDimensions
+   REAL(ReKi)                                    :: u(2**NumDimensions)                          ! size 2^NumDimensions
+
+   INTEGER(IntKi)                                :: nd(NumDimensions)                            ! size of each dimension
+   INTEGER(IntKi)                                :: i
+   
+
+      ! find the indices into the arrays representing coordinates of each dimension:
+      !  (by using LocateStp, we do not require equally spaced frequencies or points)
+
+   nd(1) = SIZE(x)
+   nd(2) = SIZE(y)
+   nd(3) = SIZE(z)
+
+   CALL LocateStp( InCoord(1), x, LastIndex(1), nd(1) )
+   CALL LocateStp( InCoord(2), y, LastIndex(2), nd(2) )
+   CALL LocateStp( InCoord(3), z, LastIndex(3), nd(3) )
+
+   Indx_Lo = LastIndex  ! at this point, 0 <= Indx_Lo(i) <= n(i) for all i
+
+
+   DO i=1,NumDimensions
+      IF (Indx_Lo(i) == 0) THEN
+         Indx_Lo(i) = 1
+      ELSEIF (Indx_Lo(i) == nd(i) ) THEN
+         Indx_Lo(i) = max( nd(i) - 1, 1 )                ! make sure it's a valid index
+      END IF
+      Indx_Hi(i) = min( Indx_Lo(i) + 1 , nd(i) )         ! make sure it's a valid index
+   END DO
+   
+ 
+
+      ! calculate the bounding box; the positions of all dimensions:
+
+   pos_Lo(1) = x( Indx_Lo(1) )
+   pos_Hi(1) = x( Indx_Hi(1) )
+
+   pos_Lo(2) = y( Indx_Lo(2) )
+   pos_Hi(2) = y( Indx_Hi(2) )
+
+   pos_Lo(3) = z( Indx_Lo(3) )
+   pos_Hi(3) = z( Indx_Hi(3) )
+   
+
+      ! 2-D linear interpolation:
+
+   CALL IsoparametricCoords( InCoord, pos_Lo, pos_Hi, isopc )      ! Calculate iospc
+
+   
+   N(1)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(2)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(3)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(4)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi - isopc(3) )
+   N(5)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(6)  = ( 1.0_ReKi + isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(7)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi + isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N(8)  = ( 1.0_ReKi - isopc(1) )*( 1.0_ReKi - isopc(2) )*( 1.0_ReKi + isopc(3) )
+   N     = N / REAL( SIZE(N), ReKi )  ! normalize
+      
+   u(1)  = Dataset( Indx_Hi(1), Indx_Lo(2), Indx_Lo(3) )
+   u(2)  = Dataset( Indx_Hi(1), Indx_Hi(2), Indx_Lo(3) )
+   u(3)  = Dataset( Indx_Lo(1), Indx_Hi(2), Indx_Lo(3) )
+   u(4)  = Dataset( Indx_Lo(1), Indx_Lo(2), Indx_Lo(3) )
+   u(5)  = Dataset( Indx_Hi(1), Indx_Lo(2), Indx_Hi(3) )
+   u(6)  = Dataset( Indx_Hi(1), Indx_Hi(2), Indx_Hi(3) )
+   u(7)  = Dataset( Indx_Lo(1), Indx_Hi(2), Indx_Hi(3) )
+   u(8)  = Dataset( Indx_Lo(1), Indx_Lo(2), Indx_Hi(3) )   
+   
+   InterpData = SUM ( N * u )     ! could use dot_product, though I'm not sure it's the came for complex numbers
+      
+
+END SUBROUTINE InterpStpReal3D   
+!=======================================================================
+   FUNCTION InterpWrappedStpReal( XValIn, XAry, YAry, Ind, AryLen )
+
+
+      ! This funtion returns a y-value that corresponds to an input x-value which is wrapped back
+      ! into the range [0-XAry(AryLen) by interpolating into the arrays.  
+      ! It is assumed that XAry is sorted in ascending order.
+      ! It uses the passed index as the starting point and does a stepwise interpolation from there.  This is
+      ! especially useful when the calling routines save the value from the last time this routine was called
+      ! for a given case where XVal does not change much from call to call.  When there is no correlation
+      ! from one interpolation to another, InterpBin() may be a better choice.
+      ! It returns the first or last YAry() value if XVal is outside the limits of XAry().
+      ! This routine assumes YAry is REAL.
+
+
+      ! Function declaration.
+
+   REAL(ReKi)                   :: InterpWrappedStpReal                                   ! This function.
+
+
+      ! Argument declarations.
+
+   INTEGER, INTENT(IN)          :: AryLen                                          ! Length of the arrays.
+   INTEGER, INTENT(INOUT)       :: Ind                                             ! Initial and final index into the arrays.
+
+   REAL(ReKi), INTENT(IN)       :: XAry    (AryLen)                                ! Array of X values to be interpolated.
+   REAL(ReKi), INTENT(IN)       :: XValIn                                           ! X value to be interpolated.
+   REAL(ReKi), INTENT(IN)       :: YAry    (AryLen)                                ! Array of Y values to be interpolated.
+
+   REAL(ReKi)                   :: XVal                                           ! X value to be interpolated.
+   
+   
+   
+      ! Wrap XValIn into the range XAry(1) to XAry(AryLen)
+   XVal = MOD(XValIn, XAry(AryLen))
+
+      ! Set the Ind to the first index if we are at the beginning of XAry
+   IF ( XVal <= XAry(2) )  THEN  
+      Ind           = 1
+   END IF
+   
+   InterpWrappedStpReal = InterpStpReal( XVal, XAry, YAry, Ind, AryLen )
+   
+   
+   END FUNCTION InterpWrappedStpReal ! ( XVal, XAry, YAry, Ind, AryLen )
+!=======================================================================
+!> This subroutine calculates the iosparametric coordinates, isopc, which is a value between -1 and 1 
+!! (for each dimension of a dataset), indicating where InCoord falls between posLo and posHi.
+!! It is used in InterpStpReal2D and InterpStpReal3D.
+   SUBROUTINE IsoparametricCoords( InCoord, posLo, posHi, isopc )
+
+! This subroutine calculates the iosparametric coordinates, isopc, which is a value between -1 and 1 
+! (for each dimension of a dataset), indicating where InCoord falls between posLo and posHi.
+! It is used in InterpStpReal2D and InterpStpReal3D.
+   
+   
+      REAL(ReKi),     INTENT(IN   )          :: InCoord(:)                             !< Coordinate values we're interpolating to; (size = number of interpolation dimensions)
+      REAL(ReKi),     INTENT(IN   )          :: posLo(:)                               !< coordinate values associated with Indx_Lo; (size = number of interpolation dimensions)
+      REAL(ReKi),     INTENT(IN   )          :: posHi(:)                               !< coordinate values associated with Indx_Hi; (size = number of interpolation dimensions)
+      REAL(ReKi),     INTENT(  OUT)          :: isopc(:)                               !< isoparametric coordinates; (position within the box)
+
+      ! local variables
+      REAL(ReKi)                             :: dx                                     ! difference between high and low coordinates in the bounding "box"
+      INTEGER(IntKi)                         :: i                                      ! loop counter
+   
+   
+      do i=1,size(isopc)
+      
+         dx = posHi(i) - posLo(i) 
+         if (EqualRealNos(dx, 0.0_ReKi)) then
+            isopc(i) = 1.0_ReKi
+         else
+            isopc(i) = ( 2.0_ReKi*InCoord(i) - posLo(i) - posHi(i) ) / dx
+               ! to verify that we don't extrapolate, make sure this is bound between -1 and 1 (effectively nearest neighbor)
+            isopc(i) = min( 1.0_ReKi, isopc(i) )
+            isopc(i) = max(-1.0_ReKi, isopc(i) )
+         end if
+      
+      end do
+            
+   END SUBROUTINE IsoparametricCoords   
+!=======================================================================   
    FUNCTION IsSymmetric( A )
 
       ! This function returns a logical TRUE/FALSE value that indicates
@@ -1957,7 +2463,6 @@ CONTAINS
 
    RETURN
    END SUBROUTINE MPi2Pi
-   
 !=======================================================================
    FUNCTION PSF ( Npsf, NumPrimes, subtract )
 
@@ -2048,8 +2553,180 @@ CONTAINS
 
     RETURN
     END FUNCTION PSF   
+!=======================================================================  
+   FUNCTION Quaternion_Conjugate(q)
+
+      ! This function computes the conjugate of a quaternion, q
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 6
    
+   TYPE(Quaternion), INTENT(IN)    :: q     
+   
+   TYPE(Quaternion)                :: Quaternion_Conjugate
+   
+      
+   Quaternion_Conjugate%q0 =  q%q0 
+   Quaternion_Conjugate%v  = -q%v
+      
+   END FUNCTION Quaternion_Conjugate   
+!=======================================================================  
+   FUNCTION Quaternion_Norm(q)
+
+      ! This function computes the 2-norm of a quaternion, q
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 5
+   
+   TYPE(Quaternion), INTENT(IN)    :: q     
+   
+   REAL(ReKi)                      :: Quaternion_Norm
+   
+      
+   Quaternion_Norm = sqrt( q%q0**2 + DOT_PRODUCT(q%v, q%v) )
+   
+   
+   END FUNCTION Quaternion_Norm   
+!=======================================================================  
+   FUNCTION Quaternion_Power(q,alpha)
+
+      ! This function computes the quaternion, q, raised to an arbitrary
+      ! real exponent, alpha.
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 7-8
+   
+   TYPE(Quaternion), INTENT(IN)    :: q     
+   REAL(ReKi)      , INTENT(IN)    :: alpha
+   
+   TYPE(Quaternion)                :: Quaternion_Power
+   
+   
+      ! local variables
+   REAL(ReKi)                      :: greek   ! the product of alpha and theta
+   REAL(ReKi)                      :: n(3)
+   REAL(ReKi)                      :: q_norm
+   REAL(ReKi)                      :: q_norm_power
+   REAL(ReKi)                      :: theta
+      
+   
+   q_norm       = Quaternion_Norm( q )     
+   theta        = acos( q%q0 / q_norm )
+   n            = q%v / TwoNorm(q%v)
+   
+   greek        = alpha * theta
+   q_norm_power = q_norm ** alpha
+   
+   Quaternion_Power%q0 =  q_norm_power * cos( greek )
+   Quaternion_Power%v  =  q_norm_power * sin( greek ) * n
+      
+   END FUNCTION Quaternion_Power   
+!=======================================================================  
+   FUNCTION Quaternion_Product(p, q)
+
+      ! This function computes the product of two quaternions, p and q
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 4
+   
+   TYPE(Quaternion), INTENT(IN)    :: p      
+   TYPE(Quaternion), INTENT(IN)    :: q     
+   
+   TYPE(Quaternion)                :: Quaternion_Product
+   
+      
+   Quaternion_Product%q0 = p%q0 * q%q0 - DOT_PRODUCT(p%v, q%v)
+   Quaternion_Product%v  = p%q0*q%v + q%q0*p%v + CROSS_PRODUCT( p%v, q%v ) 
+   
+   
+   END FUNCTION Quaternion_Product   
+!=======================================================================  
+   FUNCTION Quaternion_to_DCM(q)
+
+      ! This function converts a quaternion to an equivalent direction cosine matrix
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 9-17
+   
+   TYPE(Quaternion), INTENT(IN)    :: q     
+   
+   REAL(ReKi)                      :: Quaternion_to_DCM (3,3)
+   
+      ! local variables (products of quaternion terms)
+   REAL(ReKi)                      :: q0q0, q0q1, q0q2, q0q3
+   REAL(ReKi)                      :: q1q1, q1q2, q1q3 
+   REAL(ReKi)                      :: q2q2, q2q3
+   REAL(ReKi)                      :: q3q3
+   
+   q0q0 = q%q0**2
+   q0q1 = q%q0      * q%v(1)
+   q0q2 = q%q0      * q%v(2)
+   q0q3 = q%q0      * q%v(3)
+   
+   q1q1 = q%v(1)**2
+   q1q2 = q%v(1)    * q%v(2)
+   q1q3 = q%v(1)    * q%v(3)
+
+   q2q2 = q%v(2)**2
+   q2q3 = q%v(2)    * q%v(3)
+   
+   q3q3 = q%v(2)**2
+   
+   
+   Quaternion_to_DCM(1,1) =          q0q0 +          q1q1 - q2q2 - q3q3  ! Eq.  9
+   Quaternion_to_DCM(1,2) = 2.0_ReKi*q1q2 + 2.0_ReKi*q0q3                ! Eq. 10
+   Quaternion_to_DCM(1,3) = 2.0_ReKi*q1q3 + 2.0_ReKi*q0q2                ! Eq. 11
+
+   Quaternion_to_DCM(2,1) = 2.0_ReKi*q1q2 - 2.0_ReKi*q0q3                ! Eq. 12
+   Quaternion_to_DCM(2,2) =          q0q0 -          q1q1 + q2q2 - q3q3  ! Eq. 13
+   Quaternion_to_DCM(2,3) = 2.0_ReKi*q2q3 +          q0q1                ! Eq. 14
+   
+   
+   Quaternion_to_DCM(3,1) = 2.0_ReKi*q1q3 +          q0q2                ! Eq. 15
+   Quaternion_to_DCM(3,2) = 2.0_ReKi*q2q3 -          q0q1                ! Eq. 16 
+   Quaternion_to_DCM(3,3) =          q0q0 -          q1q1 - q2q2 + q3q3  ! Eq. 17
+   
+   
+   END FUNCTION Quaternion_to_DCM   
+!=======================================================================  
+   FUNCTION DCM_to_Quaternion(DCM)
+
+      ! This function converts a direction cosine matrix to an equivalent quaternion 
+      !
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 18-21
+   
+   REAL(ReKi)      , INTENT(IN)    :: DCM (3,3)          ! Direction cosine matrix
+   TYPE(Quaternion)                :: DCM_to_Quaternion        
+   
+         
+   DCM_to_Quaternion%q0   =      0.5_ReKi * sqrt( 1.0_ReKi + DCM(1,1) + DCM(2,2) + DCM(3,3) )                         ! Eq. 18
+   DCM_to_Quaternion%v(1) = sign(0.5_ReKi * sqrt( 1.0_ReKi + DCM(1,1) - DCM(2,2) - DCM(3,3) ) , DCM(2,3) - DCM(3,2) ) ! Eq. 19
+   DCM_to_Quaternion%v(2) = sign(0.5_ReKi * sqrt( 1.0_ReKi - DCM(1,1) + DCM(2,2) - DCM(3,3) ) , DCM(3,1) - DCM(1,3) ) ! Eq. 20
+   DCM_to_Quaternion%v(3) = sign(0.5_ReKi * sqrt( 1.0_ReKi - DCM(1,1) - DCM(2,2) + DCM(3,3) ) , DCM(1,2) - DCM(2,1) ) ! Eq. 21
+
+   
+   
+   END FUNCTION DCM_to_Quaternion
 !=======================================================================         
+   FUNCTION Quaternion_Interp(q1,q2,s)
+
+      ! This function computes the interpolated quaternion at time
+      ! t1 + s*(t2-t1) and s is in [0,1]
+      ! 
+      ! "'Interpolation' of DCMs", M.A. Sprague, 11 March 2014, Eq. 23
+   
+   TYPE(Quaternion), INTENT(IN)    :: q1      
+   TYPE(Quaternion), INTENT(IN)    :: q2    
+   REAL(ReKi),       INTENT(IN)    :: s
+   
+   TYPE(Quaternion)                :: Quaternion_Interp
+   
+      
+   Quaternion_Interp = Quaternion_Conjugate(q1)
+   Quaternion_Interp = Quaternion_Product(Quaternion_Interp, q2)
+   Quaternion_Interp = Quaternion_Power(  Quaternion_Interp, s )
+   Quaternion_Interp = Quaternion_Product(q1, Quaternion_Interp)
+   
+   
+! bjj: this function has not been tested. I have not tested any of the quaternion routines, either. 
+
+   END FUNCTION Quaternion_Interp
+!=======================================================================
    SUBROUTINE RegCubicSplineInit ( AryLen, XAry, YAry, DelX, Coef, ErrStat, ErrMsg )
 
 
@@ -2650,6 +3327,45 @@ CONTAINS
       RETURN
    END SUBROUTINE RombergInt
 !=======================================================================
+   SUBROUTINE SetAnglesForInterp( angles )
+
+      ! this routine takes angles (in radians) and converts them to appropriate
+      ! ranges so they can be interpolated appropriately
+      ! (i.e., interpolating between pi+.1 and -pi should give pi+0.5 
+      ! instead of of 0.05 radians, so we give return the angles pi+.1 and -pi+2pi=pi
+      ! we assume the interpolation occurs in the second dimension of angles
+      ! and it is done for each angle in the first dimension
+   
+      REAL(ReKi), INTENT(INOUT)     :: angles(:,:)
+
+      REAL(ReKi)                    :: diff         ! difference between two adjacent angles 
+      INTEGER(IntKi)                :: nr, nc       ! size of the angles matrix
+      INTEGER(IntKi)                :: ir, ic       ! loop counters for each array dimension
+   
+      nr = size(angles,1)
+      nc = size(angles,2)
+   
+   
+         ! now let's make sure they don't cross a 2pi boundary (max |difference| can be pi):
+         ! bjj: this is a dumb algorithm that should be revisited sometime
+   
+      do ic=2,nc            
+         do ir=1,nr
+            diff = angles(ir,ic-1) - angles(ir,ic)
+            do while ( diff > pi )
+               angles(ir,ic) = angles(ir,ic) + TwoPi
+               diff = angles(ir,ic-1) - angles(ir,ic)
+            end do
+            do while ( diff < -pi )
+               angles(ir,ic) = angles(ir,ic) - TwoPi
+               diff = angles(ir,ic-1) - angles(ir,ic)
+            end do                     
+         end do      
+      end do
+   
+   
+   END SUBROUTINE SetAnglesForInterp
+!=======================================================================
    SUBROUTINE SetConstants( )
 
          ! This routine computes numeric constants stored in the NWTC Library
@@ -2922,10 +3638,43 @@ CONTAINS
    RETURN
    END FUNCTION StdDevFn ! ( Ary, AryLen, Mean )
 !=======================================================================
+   FUNCTION trace(A)
+   
+      ! This function computes the trace of a square matrix:
+      ! SUM ( A(i,i) ) for i=1, min( SIZE(A,1), SIZE(A,2) )
+      
+   REAL(ReKi), INTENT(IN)  :: A(:,:)
+   REAL(ReKi)              :: trace
+   
+   INTEGER(IntKi)          :: n     ! rows/cols in A
+   INTEGER(IntKi)          :: i     ! loop counter
+   
+   n = min( SIZE(A,1), SIZE(A,2) )
+
+   trace = 0.0_ReKi
+   do i=1,n
+      trace = trace + A(i,i)
+   end do
+   
+   END FUNCTION trace
+!=======================================================================
+   FUNCTION TwoNorm(v)
+   
+      ! this function returns the 2-norm of a vector v
+      ! fortran 2008 has Norm2() built in
+      
+      REAL(ReKi), INTENT(IN)  :: v(:)      
+      REAL(ReKi)              :: TwoNorm      
+      
+      TwoNorm = SQRT( DOT_PRODUCT(v, v) )
+      
+      
+   END FUNCTION
+!=======================================================================  
    SUBROUTINE Zero2TwoPi ( Angle )
 
       ! This routine is used to convert Angle to an equivalent value
-      !  between 0 and 2*pi.
+      !  in the range [0, 2*pi).
       
 
       ! Argument declarations:
@@ -2948,40 +3697,5 @@ CONTAINS
 
    RETURN
    END SUBROUTINE Zero2TwoPi   
-!=======================================================================
-
-!=======================================================================
-!> This subroutine calculates the iosparametric coordinates, isopc, which is a value between -1 and 1 
-!! (for each dimension of a dataset), indicating where InCoord falls between posLo and posHi.
-!!
-SUBROUTINE IsoparametricCoords( InCoord, posLo, posHi, isopc )
-
-
-   REAL(ReKi),     INTENT(IN   )          :: InCoord(:)                             !< Coordinate values we're interpolating to; (size = number of interpolation dimensions)
-   REAL(ReKi),     INTENT(IN   )          :: posLo(:)                               !< coordinate values associated with Indx_Lo; (size = number of interpolation dimensions)
-   REAL(ReKi),     INTENT(IN   )          :: posHi(:)                               !< coordinate values associated with Indx_Hi; (size = number of interpolation dimensions)
-   REAL(ReKi),     INTENT(  OUT)          :: isopc(:)                               !< isoparametric coordinates; (position within the box)
-
-   ! local variables
-   REAL(ReKi)                             :: dx                                     ! difference between high and low coordinates in the bounding "box"
-   INTEGER(IntKi)                         :: i                                      ! loop counter
-   
-   
-   do i=1,size(isopc)
-      
-      dx = posHi(i) - posLo(i) 
-      if (EqualRealNos(dx, 0.0_ReKi)) then
-         isopc(i) = 1.0_ReKi
-      else
-         isopc(i) = ( 2.0_ReKi*InCoord(i) - posLo(i) - posHi(i) ) / dx
-            ! to verify that we don't extrapolate, make sure this is bound between -1 and 1 (effectively nearest neighbor)
-         isopc(i) = min( 1.0_ReKi, isopc(i) )
-         isopc(i) = max(-1.0_ReKi, isopc(i) )
-      end if
-      
-   end do
-            
-END SUBROUTINE IsoparametricCoords   
-!=======================================================================
-   
+!=======================================================================  
 END MODULE NWTC_Num
