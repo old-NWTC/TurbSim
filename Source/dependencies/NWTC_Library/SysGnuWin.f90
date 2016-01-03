@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-02-12 09:16:39 -0700 (Thu, 12 Feb 2015) $
-! (File) Revision #: $Rev: 289 $
+! File last committed: $Date: 2015-11-05 14:57:40 -0700 (Thu, 05 Nov 2015) $
+! (File) Revision #: $Rev: 350 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/SysGnuWin.f90 $
 !**********************************************************************************************************************************
 MODULE SysSubs
@@ -81,7 +81,6 @@ MODULE SysSubs
 
    LOGICAL, PARAMETER            :: KBInputOK   = .TRUE.                            ! A flag to tell the program that keyboard input is allowed in the environment.
 
-   CHARACTER(10), PARAMETER      :: Endian      = 'BIG_ENDIAN'                      ! The internal format of numbers.
    CHARACTER(*),  PARAMETER      :: NewLine     = ACHAR(10)                         ! The delimiter for New Lines [ Windows is CHAR(13)//CHAR(10); MAC is CHAR(13); Unix is CHAR(10) {CHAR(13)=\r is a line feed, CHAR(10)=\n is a new line}]
    CHARACTER(*),  PARAMETER      :: OS_Desc     = 'GNU Fortran for Windows'         ! Description of the language/OS
    CHARACTER( 1), PARAMETER      :: PathSep     = '\'                               ! The path separator.
@@ -462,6 +461,7 @@ CONTAINS
 
    IF ( NChars > 0 ) THEN
 
+      ! bjj: note that this will produce an error if NChars > 999
       WRITE (Fmt(5:7),'(I3)')  NChars
 
       WRITE (CU,Fmt,ADVANCE='NO')  CR, Str
@@ -495,13 +495,13 @@ CONTAINS
    IF ( LEN_TRIM(Str)  < 1 ) THEN
       WRITE ( CU, '()', IOSTAT=ErrStat )
    ELSE
-      WRITE ( CU,Frm, IOSTAT=ErrStat ) TRIM(Str)
+      WRITE ( CU, Frm, IOSTAT=ErrStat ) TRIM(Str)
    END IF
 
 
    END SUBROUTINE WriteScr ! ( Str )
-!=======================================================================
 
+!=======================================================================
 
 
 !==================================================================================================================================
@@ -532,6 +532,56 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
          CHARACTER(KIND=C_CHAR)     :: lpFileName(*)
       END FUNCTION LoadLibrary
 
+   END INTERFACE
+
+
+   ErrStat = ErrID_None
+   ErrMsg = ''
+
+
+      ! Load the DLL and get the file address:
+
+   DLL%FileAddr = LoadLibrary( TRIM(DLL%FileName)//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
+   IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) THEN
+      ErrStat = ErrID_Fatal
+      WRITE(ErrMsg,'(I2)') BITS_IN_ADDR
+      ErrMsg  = 'The dynamic library '//TRIM(DLL%FileName)//' could not be loaded. Check that the file '// &
+                'exists in the specified location and that it is compiled for '//TRIM(ErrMsg)//'-bit applications.'
+      RETURN
+   END IF
+
+
+      ! Get the procedure address:
+
+   CALL LoadDynamicLibProc ( DLL, ErrStat, ErrMsg )
+
+
+   RETURN
+END SUBROUTINE LoadDynamicLib
+!==================================================================================================================================
+SUBROUTINE LoadDynamicLibProc ( DLL, ErrStat, ErrMsg )
+
+      ! This SUBROUTINE is used to dynamically load a procedure in a DLL.
+
+      ! Passed Variables:
+
+   TYPE (DLL_Type),           INTENT(INOUT)  :: DLL         ! The DLL to be loaded.
+   INTEGER(IntKi),            INTENT(  OUT)  :: ErrStat     ! Error status of the operation
+   CHARACTER(*),              INTENT(  OUT)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+
+
+      ! local variables
+   INTEGER(IntKi)                            :: i
+   
+   INTERFACE  ! Definitions of Windows API routines
+
+      !...........................
+      !bjj: I have been unable to find a solution that works with both IVF and gfortran...
+      !bjj: note that "Intel Fortran does not support use of STDCALL with BIND(C) at this time"
+      !     See this link: http://software.intel.com/en-us/articles/replacing-intel-fortran-attributes-with-c-interoperability-features
+      !bjj: Until this is fixed, Intel uses kernel32.f90 definitions instead of the interface below:
+      !...........................
+
       FUNCTION GetProcAddress(hModule, lpProcName) BIND(C, NAME='GetProcAddress')
          USE, INTRINSIC :: ISO_C_BINDING
          IMPLICIT NONE
@@ -547,33 +597,28 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
 
    ErrStat = ErrID_None
    ErrMsg = ''
+   !IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) RETURN
 
+   
+      ! Get the procedure addresses:
 
-      ! Load the DLL and get the file address:
+   do i=1,NWTC_MAX_DLL_PROC
+      if ( len_trim( DLL%ProcName(i) ) > 0 ) then
+   
+         DLL%ProcAddr(i) = GetProcAddress( DLL%FileAddr, TRIM(DLL%ProcName(i))//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
 
-   DLL%FileAddr = LoadLibrary( TRIM(DLL%FileName)//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
-   IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) THEN
-      ErrStat = ErrID_Fatal
-      WRITE(ErrMsg,'(I2)') BITS_IN_ADDR
-      ErrMsg  = 'The dynamic library '//TRIM(DLL%FileName)//' could not be loaded. Check that the file '// &
-                'exists in the specified location and that it is compiled for '//TRIM(ErrMsg)//'-bit systems.'
-      RETURN
-   END IF
-
-
-      ! Get the procedure address:
-
-   DLL%ProcAddr = GetProcAddress( DLL%FileAddr, TRIM(DLL%ProcName)//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
-
-   IF(.NOT. C_ASSOCIATED(DLL%ProcAddr)) THEN
-      ErrStat = ErrID_Fatal
-      ErrMsg  = 'The procedure '//TRIM(DLL%ProcName)//' in file '//TRIM(DLL%FileName)//' could not be loaded.'
-      RETURN
-   END IF
-
+         IF(.NOT. C_ASSOCIATED(DLL%ProcAddr(i))) THEN
+            ErrStat = ErrID_Fatal
+            ErrMsg  = 'The procedure '//TRIM(DLL%ProcName(i))//' in file '//TRIM(DLL%FileName)//' could not be loaded.'
+            RETURN
+         END IF
+         
+      end if
+   end do
+         
 
    RETURN
-END SUBROUTINE LoadDynamicLib
+END SUBROUTINE LoadDynamicLibProc
 !==================================================================================================================================
 SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
 
@@ -603,6 +648,7 @@ SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
 
 
       ! Free the DLL:
+   IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) RETURN
 
    Success = FreeLibrary( DLL%FileAddr ) !If the function succeeds, the return value is nonzero. If the function fails, the return value is zero.
 
@@ -613,10 +659,12 @@ SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
    ELSE
       ErrStat = ErrID_None
       ErrMsg = ''
+      DLL%FileAddr = INT(0,C_INTPTR_T)
    END IF
 
    RETURN
 END SUBROUTINE FreeDynamicLib
 !==================================================================================================================================
+
 
 END MODULE SysSubs

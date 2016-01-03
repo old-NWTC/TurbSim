@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-02-12 09:16:39 -0700 (Thu, 12 Feb 2015) $
-! (File) Revision #: $Rev: 289 $
+! File last committed: $Date: 2015-11-05 14:57:40 -0700 (Thu, 05 Nov 2015) $
+! (File) Revision #: $Rev: 350 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/SysIVF_Labview.f90 $
 !**********************************************************************************************************************************
 MODULE SysSubs
@@ -80,12 +80,11 @@ MODULE SysSubs
 
    LOGICAL, PARAMETER            :: KBInputOK   = .FALSE.                           ! A flag to tell the program that keyboard input is allowed in the environment.
 
-   CHARACTER(10), PARAMETER      :: Endian      = 'BIG_ENDIAN'                      ! The internal format of numbers.
    CHARACTER(*),  PARAMETER      :: NewLine     = ACHAR(10)                         ! The delimiter for New Lines [ Windows is CHAR(13)//CHAR(10); MAC is CHAR(13); Unix is CHAR(10) {CHAR(13)=\r is a line feed, CHAR(10)=\n is a new line}]
    CHARACTER(*),  PARAMETER      :: OS_Desc     = 'Intel Visual Fortran for Windows/LabVIEW' ! Description of the language/OS
    CHARACTER( 1), PARAMETER      :: PathSep     = '\'                               ! The path separator.
    CHARACTER( 1), PARAMETER      :: SwChar      = '/'                               ! The switch character for command-line options.
-   CHARACTER(11), PARAMETER      :: UnfForm     = 'UNFORMATTED'                     ! The string to specify unformatted I/O files.
+   CHARACTER(11), PARAMETER      :: UnfForm     = 'BINARY'                          ! The string to specify unformatted I/O files. (used in OpenUOutFile and OpenUInpFile [see TurbSim's .bin files])
 
 CONTAINS
 
@@ -97,7 +96,7 @@ CONTAINS
       ! in bytes corresponding to a file unit number or returns -1 on error.
 
 
-   USE IFPORT
+   !USE IFPORT
 
 
       ! Function declaration.
@@ -500,6 +499,26 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
 
    RETURN
 END SUBROUTINE LoadDynamicLib
+!==================================================================================================================================
+SUBROUTINE LoadDynamicLibProc ( DLL, ErrStat, ErrMsg )
+
+      ! This SUBROUTINE is used to dynamically load a DLL.
+
+      ! Passed Variables:
+
+   TYPE (DLL_Type),           INTENT(INOUT)  :: DLL         ! The DLL to be loaded.
+   INTEGER(IntKi),            INTENT(  OUT)  :: ErrStat     ! Error status of the operation
+   CHARACTER(*),              INTENT(  OUT)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+
+
+
+   ErrStat = ErrID_Fatal
+   ErrMsg = ' LoadDynamicLibProc: Not implemented for '//TRIM(OS_Desc)
+
+
+
+   RETURN
+END SUBROUTINE LoadDynamicLibProc
 !==================================================================================================================================
 SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
 

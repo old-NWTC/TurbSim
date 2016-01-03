@@ -4,8 +4,8 @@
 ! This code provides a wrapper for the LAPACK routines currently used at the NWTC (mainly codes in the FAST framework).
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-03-12 14:02:16 -0600 (Thu, 12 Mar 2015) $
-! (File) Revision #: $Rev: 293 $
+! File last committed: $Date: 2015-06-24 00:53:52 -0600 (Wed, 24 Jun 2015) $
+! (File) Revision #: $Rev: 318 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/branches/NetLib/NWTC_source/NWTC_LAPACK.f90 $
 !**********************************************************************************************************************************
 MODULE NWTC_LAPACK
@@ -19,10 +19,10 @@ MODULE NWTC_LAPACK
 
          ! Your project must include the following files:
          ! From the NWTC Subroutine Library:
-         !     {Doub | Sing}Prec.f90 [from NWTC Library]
+         !     SingPrec.f90          [from NWTC Library]
          !     Sys*.f90              [from NWTC Library]
          !     NWTC_Base.f90         [from NWTC Library]
-         ! lapack library (preferable a binary, but available in source form from http://www.netlib.org/, too)
+         ! lapack library (preferably a binary, but available in source form from http://www.netlib.org/, too)
          ! This wrapper file:
          !     NWTC_LAPACK.f90
 
@@ -214,7 +214,7 @@ CONTAINS
       REAL(R8Ki)      ,intent(in   ) :: A( :, : )         ! Matrix A
       REAL(R8Ki)      ,intent(in   ) :: B( :, : )         ! Matrix B
       REAL(R8Ki)      ,intent(inout) :: C( :, : )         ! Matrix C: Before entry, C must contain the matrix C, except when beta is zero, in which case C need not
-                                                          ! case C need not be set on entry. On exit, the array C is overwritten by the m by n matrix ( alpha*op( A )*op( B ) + beta*C ).
+                                                          ! be set on entry. On exit, the array C is overwritten by the m by n matrix ( alpha*op( A )*op( B ) + beta*C ).
 
       INTEGER(IntKi),  intent(  out) :: ErrStat           ! Error level
       CHARACTER(*),    intent(  out) :: ErrMsg            ! Message describing error
@@ -292,7 +292,7 @@ CONTAINS
       REAL(SiKi)      ,intent(in   ) :: A( :, : )         ! Matrix A
       REAL(SiKi)      ,intent(in   ) :: B( :, : )         ! Matrix B
       REAL(SiKi)      ,intent(inout) :: C( :, : )         ! Matrix C: Before entry, C must contain the matrix C, except when beta is zero, in which case C need not
-                                                          ! case C need not be set on entry. On exit, the array C is overwritten by the m by n matrix ( alpha*op( A )*op( B ) + beta*C ).
+                                                          ! be set on entry. On exit, the array C is overwritten by the m by n matrix ( alpha*op( A )*op( B ) + beta*C ).
 
       INTEGER(IntKi),  intent(  out) :: ErrStat           ! Error level
       CHARACTER(*),    intent(  out) :: ErrMsg            ! Message describing error

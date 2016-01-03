@@ -40,7 +40,7 @@ endif
    # Name of compiler to use and flags to use.
 FC      = gfortran
 
-FFLAGS  = -O2 -m$(BITS) -fbacktrace -ffree-line-length-none -x f95-cpp-input -DDOUBLE_PRECISION -fdefault-real-8
+FFLAGS  = -O2 -m$(BITS) -fbacktrace -ffree-line-length-none -x f95-cpp-input
 LDFLAGS = -O2 -m$(BITS) -fbacktrace -Wl,--large-address-aware
 
 #FFLAGS  = -O0 -m$(BITS) -fbacktrace -ffree-line-length-none -x f95-cpp-input -g -pg
@@ -178,7 +178,6 @@ NWTC_Library.obj:           ModMesh.obj  ModMesh_Mapping.obj
 
 NWTC_LAPACK.obj:            NWTC_Base.obj
 NWTC_FFTPACK.obj:           NWTC_Library.obj fftpack4.1.obj
-fftpack4.1.obj:             SingPrec.obj
 
 RANLUX.obj:                 NWTC_Library.obj
 

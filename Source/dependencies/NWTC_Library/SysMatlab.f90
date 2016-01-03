@@ -17,8 +17,8 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
-! (File) Revision #: $Rev: 294 $
+! File last committed: $Date: 2015-11-05 14:57:40 -0700 (Thu, 05 Nov 2015) $
+! (File) Revision #: $Rev: 350 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/SysMatlab.f90 $
 !**********************************************************************************************************************************
 MODULE SysSubs
@@ -31,6 +31,7 @@ MODULE SysSubs
    !     libmex.lib in the matlab/extern/lib/{architecture}/{compiler} folder
    !      otherwise, use preprocessor definition CONSOLE_FILE to output everything to a file named CONSOLE.TXT
    
+
 
    ! It contains the following routines:
 
@@ -82,12 +83,11 @@ MODULE SysSubs
 
    LOGICAL, PARAMETER            :: KBInputOK   = .FALSE.                           ! A flag to tell the program that keyboard input is allowed in the environment.
 
-   CHARACTER(10), PARAMETER      :: Endian      = 'BIG_ENDIAN'                      ! The internal format of numbers.
    CHARACTER(*),  PARAMETER      :: NewLine     = ACHAR(10)                         ! The delimiter for New Lines [ Windows is CHAR(13)//CHAR(10); MAC is CHAR(13); Unix is CHAR(10) {CHAR(13)=\r is a line feed, CHAR(10)=\n is a new line}]
    CHARACTER(*),  PARAMETER      :: OS_Desc     = 'Intel Visual Fortran for Windows/Matlab' ! Description of the language/OS
    CHARACTER( 1), PARAMETER      :: PathSep     = '\'                               ! The path separator.
    CHARACTER( 1), PARAMETER      :: SwChar      = '/'                               ! The switch character for command-line options.
-   CHARACTER(11), PARAMETER      :: UnfForm     = 'UNFORMATTED'                     ! The string to specify unformatted I/O files.
+   CHARACTER(11), PARAMETER      :: UnfForm     = 'BINARY'                          ! The string to specify unformatted I/O files. (used in OpenUOutFile and OpenUInpFile [see TurbSim's .bin files])
 
 CONTAINS
 
@@ -508,8 +508,8 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
 
       ! This SUBROUTINE is used to dynamically load a DLL.
 
-   USE               IFWINTY,  ONLY : HANDLE, LPVOID
-   USE               kernel32, ONLY : LoadLibrary, GetProcAddress
+   USE               IFWINTY,  ONLY : HANDLE
+   USE               kernel32, ONLY : LoadLibrary
 
       ! Passed Variables:
 
@@ -520,7 +520,6 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
 
       ! local variables
    INTEGER(HANDLE)                           :: FileAddr    ! The address of file FileName.         (RETURN value from LoadLibrary in kernel32.f90)
-   INTEGER(LPVOID)                           :: ProcAddr    ! The address of procedure ProcName.    (RETURN value from GetProcAddress in kernel32.f90)
 
 
    ErrStat = ErrID_None
@@ -536,25 +535,58 @@ SUBROUTINE LoadDynamicLib ( DLL, ErrStat, ErrMsg )
       ErrStat = ErrID_Fatal
       WRITE(ErrMsg,'(I2)') BITS_IN_ADDR
       ErrMsg  = 'The dynamic library '//TRIM(DLL%FileName)//' could not be loaded. Check that the file '// &
-                'exists in the specified location and that it is compiled for '//TRIM(ErrMsg)//'-bit systems.'
+                'exists in the specified location and that it is compiled for '//TRIM(ErrMsg)//'-bit applications.'
       RETURN
    END IF
 
-
-      ! Get the procedure address:
-
-   ProcAddr = GetProcAddress( DLL%FileAddr, TRIM(DLL%ProcName)//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
-   DLL%ProcAddr = TRANSFER(ProcAddr, DLL%ProcAddr)  !convert INTEGER(LPVOID) to INTEGER(C_FUNPTR) [used only for compatibility with gfortran]
-
-   IF(.NOT. C_ASSOCIATED(DLL%ProcAddr)) THEN
-      ErrStat = ErrID_Fatal
-      ErrMsg  = 'The procedure '//TRIM(DLL%ProcName)//' in file '//TRIM(DLL%FileName)//' could not be loaded.'
-      RETURN
-   END IF
+   CALL LoadDynamicLibProc ( DLL, ErrStat, ErrMsg )
 
 
    RETURN
 END SUBROUTINE LoadDynamicLib
+!==================================================================================================================================
+SUBROUTINE LoadDynamicLibProc ( DLL, ErrStat, ErrMsg )
+
+      ! This SUBROUTINE is used to dynamically load a procedure in a DLL.
+
+   USE               IFWINTY,  ONLY : LPVOID
+   USE               kernel32, ONLY : GetProcAddress
+
+      ! Passed Variables:
+
+   TYPE (DLL_Type),           INTENT(INOUT)  :: DLL         ! The DLL to be loaded.
+   INTEGER(IntKi),            INTENT(  OUT)  :: ErrStat     ! Error status of the operation
+   CHARACTER(*),              INTENT(  OUT)  :: ErrMsg      ! Error message if ErrStat /= ErrID_None
+
+
+      ! local variables
+   INTEGER(LPVOID)                           :: ProcAddr    ! The address of procedure ProcName.    (RETURN value from GetProcAddress in kernel32.f90)
+   INTEGER(IntKi)                            :: i
+
+   ErrStat = ErrID_None
+   ErrMsg = ''
+   !IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) RETURN
+
+   
+      ! Get the procedure addresses:
+
+   do i=1,NWTC_MAX_DLL_PROC
+      if ( len_trim( DLL%ProcName(i) ) > 0 ) then
+   
+         ProcAddr = GetProcAddress( DLL%FileAddr, TRIM(DLL%ProcName(i))//C_NULL_CHAR )  !the "C_NULL_CHAR" converts the Fortran string to a C-type string (i.e., adds //CHAR(0) to the end)
+         DLL%ProcAddr(i) = TRANSFER(ProcAddr, DLL%ProcAddr(i))  !convert INTEGER(LPVOID) to INTEGER(C_FUNPTR) [used only for compatibility with gfortran]
+
+         IF(.NOT. C_ASSOCIATED(DLL%ProcAddr(i))) THEN
+            ErrStat = ErrID_Fatal
+            ErrMsg  = 'The procedure '//TRIM(DLL%ProcName(i))//' in file '//TRIM(DLL%FileName)//' could not be loaded.'
+            RETURN
+         END IF
+      end if
+   end do
+   
+   
+   
+END SUBROUTINE LoadDynamicLibProc
 !==================================================================================================================================
 SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
 
@@ -575,7 +607,9 @@ SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
    INTEGER(BOOL)                             :: Success     ! Whether or not the call to FreeLibrary was successful
 
 
+   IF ( DLL%FileAddr == INT(0,C_INTPTR_T) ) RETURN
 
+   
    FileAddr = TRANSFER(DLL%FileAddr, FileAddr) !convert INTEGER(C_INTPTR_T) to INTEGER(HANDLE) [used only for compatibility with gfortran]
 
       ! Free the DLL:
@@ -589,6 +623,7 @@ SUBROUTINE FreeDynamicLib ( DLL, ErrStat, ErrMsg )
    ELSE
       ErrStat = ErrID_None
       ErrMsg = ''
+      DLL%FileAddr = INT(0,C_INTPTR_T)
    END IF
 
    RETURN

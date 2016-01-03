@@ -17,41 +17,36 @@
 ! limitations under the License.
 !
 !**********************************************************************************************************************************
-! File last committed: $Date: 2015-03-12 14:42:36 -0600 (Thu, 12 Mar 2015) $
-! (File) Revision #: $Rev: 294 $
+! File last committed: $Date: 2015-11-03 12:39:42 -0700 (Tue, 03 Nov 2015) $
+! (File) Revision #: $Rev: 349 $
 ! URL: $HeadURL: https://windsvn.nrel.gov/NWTC_Library/trunk/source/ModMesh.f90 $
 !**********************************************************************************************************************************
+!> The modules ModMesh and ModMesh_Types provide data structures and subroutines for representing and manipulating meshes
+!! and meshed data in the FAST modular framework. 
+!!
+!! A mesh is comprised of a set of "nodes" (simple points in space) together with information specifying how they are connected 
+!! to form "elements"  representing spatial boundaries between components. ModMesh and ModMesh_Types define point, line, surface, 
+!! and volume elements in a standard isoparametric mapping from finite element analysis. Currently only points and straight line 
+!! (line2) elements are implemented.
+!!   
+!! Associated with a mesh are one or more "fields" that represent the values of variables or "degrees of freedom" at each node. 
+!! A mesh always has a named "Position" that specifies the location in three-dimensional space as an Xi,Yi,Zi triplet of each node 
+!! and a field named "RefOrientation" that specifies the orientation (as a direction cosine matrix) of the node. 
+!! The ModMesh_Types module predefines a number of other fields of triples representing velocities, forces, and moments as well as
+!! a field of nine values representing a direction cosine matrix. 
+!!   
+!! The operations on meshes defined in the ModMesh module are creation, spatio-location of nodes, construction, committing the 
+!! mesh definition, initialization of fields, accessing field data, updating field data, copying, deallocating, and destroying meshes. 
+!! See https://nwtc.nrel.gov/FAST-Developers and https://nwtc.nrel.gov/system/files/ProgrammingHandbook_Mod20130717.pdf
 MODULE ModMesh
-
- ! The modules ModMesh and ModMesh_Types provide data structures and subroutines for representing and manipulating meshes
- ! and meshed data in the FAST modular framework. 
- !
- ! A mesh is comprised of a set of "nodes" (simple points in space) together with information specifying how they are connected 
- ! to form "elements"  representing spatial boundaries between components. ModMesh and ModMesh_Types define point, line, surface, 
- ! and volume elements in a standard isoparametric mapping from finite element analysis. Currently only points and straight line 
- ! (line2) elements are implemented.
- ! Associated with a mesh are one or more "fields" that represent the values of variables or "degrees of freedom" at each node. 
- ! A mesh always has a named "Position" that specifies the location in three-dimensional space as an Xi,Yi,Zi triplet of each node 
- ! and a field named "RefOrientation" that specifies the orientation (as a direction cosine matrix) of the node. 
- ! The ModMesh_Types module predefines a number of other fields of triples representing velocities, forces, and moments as well as
- ! a field of nine values representing a direction cosine matrix. 
- ! The operations on meshes defined in the ModMesh module are creation, spatio-location of nodes, construction, committing the 
- ! mesh definition, initialization of fields, accessing field data, updating field data, copying, deallocating, and destroying meshes. 
- ! See https://wind.nrel.gov/designcodes/simulators/developers/docs/ProgrammingHandbook_Mod20130326.pdf
-
-!======================================================================================================================
-! WARNING:  Because this code uses some preprocessor directives to comment out code
-!           and because some lines go beyond column 132, you must specify the following compiler options:
-!
-!              Intel:   /fpp
-!              Gnu:     -x f95-cpp-input -ffree-line-length-none
-!======================================================================================================================
 
    USE ModMesh_Types
    IMPLICIT NONE
 !   INTEGER :: DEBUG_UNIT = 74
 
-   INTEGER, PARAMETER :: BUMPUP = 64  ! do not set to less than 2
+   INTEGER,     PARAMETER, PRIVATE :: BUMPUP = 64                !< size element list will be increased when adding an element that does not fit in the currently allocated space; do not set to less than 2
+   CHARACTER(*),PARAMETER, PRIVATE :: VTK_AryFmt = '(3(F20.6))'  !< text format for triplets written to VTK text files
+
 
    INTERFACE MeshConstructElement
       MODULE PROCEDURE MeshConstructElement_1PT ,                            &
@@ -66,187 +61,397 @@ MODULE ModMesh
 
 CONTAINS
 
-   !-------------------------------------------------------------------------------------------------------------------------------
-   SUBROUTINE MeshWrBin ( UnIn, M, ErrStat, ErrMsg, FileName)
-      ! This routine writes mesh information in binary form. If UnIn is < 0, it gets a new unit number and opens the file,
-      ! otherwise the file is appended. It is up to the caller of this routine to close the file when it's finished.
+!----------------------------------------------------------------------------------------------------------------------------------
+!> This routine writes mesh information in binary form. If UnIn is < 0, it gets a new unit number and opens the file,
+!! otherwise the file is appended. It is up to the caller of this routine to close the file when it's finished.
+SUBROUTINE MeshWrBin ( UnIn, M, ErrStat, ErrMsg, FileName)
 
       
-      INTEGER, INTENT(INOUT)                ::  UnIn     ! fortran output unit
-      TYPE(MeshType),  INTENT(IN)           ::  M        ! mesh to be reported on
+   INTEGER, INTENT(INOUT)                ::  UnIn     !< fortran output unit
+   TYPE(MeshType),  INTENT(IN)           ::  M        !< mesh to be reported on
 
-      INTEGER(IntKi),  INTENT(OUT)          :: ErrStat   ! Indicates whether an error occurred (see NWTC_Library)
-      CHARACTER(*),    INTENT(OUT)          :: ErrMsg    ! Error message associated with the ErrStat
-      CHARACTER(*),    INTENT(IN), OPTIONAL :: FileName  ! Name of the file to write the output in
+   INTEGER(IntKi),  INTENT(OUT)          :: ErrStat   !< Indicates whether an error occurred (see NWTC_Library)
+   CHARACTER(*),    INTENT(OUT)          :: ErrMsg    !< Error message associated with the ErrStat
+   CHARACTER(*),    INTENT(IN), OPTIONAL :: FileName  !< Name of the file to write the output in
 
-      ! local variables
-      INTEGER(IntKi)                        :: ErrStat2  ! Temporary storage for local errors
-      INTEGER(IntKi)                        :: I         ! loop counter
+   ! local variables
+   INTEGER(IntKi)                        :: ErrStat2  ! Temporary storage for local errors
+   INTEGER(IntKi)                        :: I         ! loop counter
+   CHARACTER(*), PARAMETER               :: RoutineName = 'MeshWrBin'
 
-      IF (UnIn < 0) THEN
-         CALL GetNewUnit( UnIn, ErrStat, ErrMsg )
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+   
+   IF (UnIn < 0) THEN
+      CALL GetNewUnit( UnIn, ErrStat, ErrMsg )
 
-         CALL OpenBOutFile ( UnIn, TRIM(FileName), ErrStat, ErrMsg )
-         IF ( ErrStat >= AbortErrLev ) RETURN
+      CALL OpenBOutFile ( UnIn, TRIM(FileName), ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+   END IF
+
+
+   ! Write information about mesh structure:
+   WRITE (UnIn, IOSTAT=ErrStat2)   INT(ReKi,B4Ki)
+   WRITE (UnIn, IOSTAT=ErrStat2)   INT(FIELDMASK_SIZE,B4Ki)
+   WRITE (UnIn, IOSTAT=ErrStat2)   M%fieldmask           ! BJJ: do we need to verify that this is size B4Ki?
+   WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%Nnodes,B4Ki)
+   WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%nelemlist,B4Ki)
+
+
+   !...........
+   ! Write nodal information:
+   !...........
+      
+   IF (.NOT. M%Initialized) RETURN
+      
+   WRITE (UnIn, IOSTAT=ErrStat2)   M%Position
+      IF ( ErrStat2 /= 0 ) THEN
+         CALL SetErrStat( ErrID_Fatal, 'Error writing Position to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+         RETURN
+      END IF
+
+   WRITE (UnIn, IOSTAT=ErrStat2)   M%RefOrientation
+      IF ( ErrStat2 /= 0 ) THEN
+         CALL SetErrStat( ErrID_Fatal, 'Error writing RefOrientation to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+         RETURN
       END IF
 
 
-      ! Write information about mesh structure:
-      WRITE (UnIn, IOSTAT=ErrStat2)   INT(ReKi,B4Ki)
-      WRITE (UnIn, IOSTAT=ErrStat2)   INT(FIELDMASK_SIZE,B4Ki)
-      WRITE (UnIn, IOSTAT=ErrStat2)   M%fieldmask           ! BJJ: do we need to verify that this is size B4Ki?
-      WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%Nnodes,B4Ki)
-      WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%nelemlist,B4Ki)
+   ! Write fields:
 
-
-      !...........
-      ! Write nodal information:
-      !...........
-      
-      IF (.NOT. M%Initialized) RETURN
-      
-      WRITE (UnIn, IOSTAT=ErrStat2)   M%Position
+   IF ( M%fieldmask(MASKID_FORCE) .AND. ALLOCATED(M%Force) ) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%Force
          IF ( ErrStat2 /= 0 ) THEN
-            CALL CheckError( ErrID_Fatal, 'Error writing Position to the mesh binary file.' )
+            CALL SetErrStat( ErrID_Fatal, 'Error writing Force to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
             RETURN
          END IF
+   END IF
 
-      WRITE (UnIn, IOSTAT=ErrStat2)   M%RefOrientation
+   IF ( M%fieldmask(MASKID_Moment) .AND. ALLOCATED(M%Moment)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%Moment
          IF ( ErrStat2 /= 0 ) THEN
-            CALL CheckError( ErrID_Fatal, 'Error writing RefOrientation to the mesh binary file.' )
+            CALL SetErrStat( ErrID_Fatal, 'Error writing Force to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
             RETURN
          END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_ORIENTATION) .AND. ALLOCATED(M%Orientation)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%Orientation
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing Orientation to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_TRANSLATIONDISP) .AND. ALLOCATED(M%TranslationDisp)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationDisp
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing TranslationDisp to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_TRANSLATIONVEL) .AND. ALLOCATED(M%TranslationVel)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationVel
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing TranslationVel to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_ROTATIONVEL) .AND. ALLOCATED(M%RotationVel)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%RotationVel
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing RotationVel to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_TRANSLATIONACC) .AND. ALLOCATED(M%TranslationAcc)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationAcc
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing TranslationAcc to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_ROTATIONACC) .AND. ALLOCATED(M%RotationAcc)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%RotationAcc
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing RotationAcc to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
+
+   IF ( M%fieldmask(MASKID_SCALAR) .AND. ALLOCATED(M%Scalars)) THEN
+      WRITE (UnIn, IOSTAT=ErrStat2)   M%Scalars
+         IF ( ErrStat2 /= 0 ) THEN
+            CALL SetErrStat( ErrID_Fatal, 'Error writing Scalars to the mesh binary file.', ErrStat, ErrMsg, RoutineName )
+            RETURN
+         END IF
+   END IF
 
 
-      ! Write fields:
+   !...........
+   ! Write element information:
+   !...........
 
-      IF ( M%fieldmask(MASKID_FORCE) .AND. ALLOCATED(M%Force) ) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%Force
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing Force to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
+   DO i=1,M%nelemlist
+      WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%ElemList(i)%Element%Xelement       ,B4Ki) ! what kind of element
+      WRITE (UnIn, IOSTAT=ErrStat2)   INT(SIZE(M%ElemList(i)%Element%ElemNodes),B4Ki) ! how many nodes
+      WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%ElemList(i)%Element%ElemNodes      ,B4Ki) ! which nodes
+   END DO
 
-      IF ( M%fieldmask(MASKID_Moment) .AND. ALLOCATED(M%Moment)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%Moment
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing Force to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
+END SUBROUTINE MeshWrBin
+!----------------------------------------------------------------------------------------------------------------------------------
+!> This routine writes the reference position and orientations of a mesh in VTK format.
+!! see VTK file information format for XML, here: http://www.vtk.org/wp-content/uploads/2015/04/file-formats.pdf
+SUBROUTINE MeshWrVTKreference ( M, FileRootName, ErrStat, ErrMsg )
+   
+   TYPE(MeshType),  INTENT(IN)           :: M             !< mesh to be written
+   CHARACTER(*),    INTENT(IN)           :: FileRootName  !< Name of the file to write the output in (excluding extension)
 
-      IF ( M%fieldmask(MASKID_ORIENTATION) .AND. ALLOCATED(M%Orientation)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%Orientation
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing Orientation to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_TRANSLATIONDISP) .AND. ALLOCATED(M%TranslationDisp)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationDisp
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing TranslationDisp to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_TRANSLATIONVEL) .AND. ALLOCATED(M%TranslationVel)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationVel
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing TranslationVel to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_ROTATIONVEL) .AND. ALLOCATED(M%RotationVel)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%RotationVel
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing RotationVel to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_TRANSLATIONACC) .AND. ALLOCATED(M%TranslationAcc)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%TranslationAcc
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing TranslationAcc to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_ROTATIONACC) .AND. ALLOCATED(M%RotationAcc)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%RotationAcc
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing RotationAcc to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-      IF ( M%fieldmask(MASKID_SCALAR) .AND. ALLOCATED(M%Scalars)) THEN
-         WRITE (UnIn, IOSTAT=ErrStat2)   M%Scalars
-            IF ( ErrStat2 /= 0 ) THEN
-               CALL CheckError( ErrID_Fatal, 'Error writing Scalars to the mesh binary file.' )
-               RETURN
-            END IF
-      END IF
-
-
-      !...........
-      ! Write element information:
-      !...........
-
-      DO i=1,M%nelemlist
-         WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%ElemList(i)%Element%Xelement       ,B4Ki) ! what kind of element
-         WRITE (UnIn, IOSTAT=ErrStat2)   INT(SIZE(M%ElemList(i)%Element%ElemNodes),B4Ki) ! how many nodes
-         WRITE (UnIn, IOSTAT=ErrStat2)   INT(M%ElemList(i)%Element%ElemNodes      ,B4Ki) ! which nodes
+   INTEGER(IntKi),  INTENT(OUT)          :: ErrStat       !< Indicates whether an error occurred (see NWTC_Library)
+   CHARACTER(*),    INTENT(OUT)          :: ErrMsg        !< Error message associated with the ErrStat
+   
+   ! local variables
+   INTEGER(IntKi)                        :: Un            ! fortran unit number
+   INTEGER(IntKi)                        :: I, J          ! loop counters
+      
+   INTEGER(IntKi)                        :: ErrStat2 
+   CHARACTER(ErrMsgLen)                  :: ErrMsg2
+   CHARACTER(*),PARAMETER                :: RoutineName = 'MeshWrVTKreference'
+      
+   CHARACTER(*),PARAMETER                :: RefOrientation(3) = (/ 'RefOrientationX','RefOrientationY','RefOrientationZ' /)
+      
+      
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+      
+   ! PolyData (.vtp) — Serial vtkPolyData (unstructured)
+   CALL GetNewUnit( Un, ErrStat2, ErrMsg2 )      
+   CALL OpenFOutFile ( Un, TRIM(FileRootName)//'.Reference.vtp', ErrStat, ErrMsg )
+      IF ( ErrStat >= AbortErrLev ) RETURN
+            
+      WRITE(Un,'(A)')         '<?xml version="1.0"?>'            
+      WRITE(Un,'(A)')         '<VTKFile type="PolyData" version="0.1" byte_order="LittleEndian">'  ! bjj note: we don't have binary data in this file, so byte_order shouldn't matter, right?
+      WRITE(Un,'(A)')         '  <PolyData>'
+      WRITE(Un,'(2(A,i7),A)') '    <Piece NumberOfPoints="', M%Nnodes, '" NumberOfVerts="  0" NumberOfLines="', M%ElemTable(ELEMENT_LINE2)%nelem, '"'
+      WRITE(Un,'(A)')         '           NumberOfStrips="  0" NumberOfPolys="  0">'
+      
+! points (i.e., nodes):      
+      WRITE(Un,'(A)')         '      <Points>'         
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%Position(:,i)
       END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '      </Points>'
+   
+! point data (orientation vectors):
+      WRITE(Un,'(A)')         '      <PointData>'        
+   DO j=1,3 
+      WRITE(Un,'(A,A,A)')   '        <DataArray type="Float32" Name="', RefOrientation(j), '" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%RefOrientation(j,:,i)
+      END DO
+      WRITE(Un,'(A)')      '        </DataArray>'
+   END DO
+      WRITE(Un,'(A)')         '      </PointData>'
+   
+! lines (i.e., elements; for line2 meshes only):
+   if ( M%ElemTable(ELEMENT_LINE2)%nelem > 0) then
+      WRITE(Un,'(A)')         '      <Lines>'
+      WRITE(Un,'(A)')         '        <DataArray type="Int32" Name="connectivity" format="ascii">'
+      DO i=1,M%ElemTable(ELEMENT_LINE2)%nelem
+         WRITE(Un,'(2(i7))') M%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(1) - 1, M%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(2) - 1
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '        <DataArray type="Int32" Name="offsets" format="ascii">'
+      DO i=1,M%ElemTable(ELEMENT_LINE2)%nelem
+         WRITE(Un,'(i7)') 2*i
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '      </Lines>'
+   end if
 
-   CONTAINS
-      !............................................................................................................................
-      SUBROUTINE CheckError(ErrID,Msg)
-      !............................................................................................................................
-      ! This subroutine sets the error message and level
-      !............................................................................................................................
+      WRITE(Un,'(A)')         '    </Piece>'
+      WRITE(Un,'(A)')         '  </PolyData>'
+      WRITE(Un,'(A)')         '</VTKFile>'
+      CLOSE(Un)      
+      
+END SUBROUTINE MeshWrVTKreference   
+!----------------------------------------------------------------------------------------------------------------------------------
+!> This routine writes mesh information in VTK format.
+!! see VTK file information format for XML, here: http://www.vtk.org/wp-content/uploads/2015/04/file-formats.pdf
+SUBROUTINE MeshWrVTK ( M, FileRootName, VTKcount, ErrStat, ErrMsg )
+      
+   TYPE(MeshType),  INTENT(IN)           :: M             !< mesh to be written
+   CHARACTER(*),    INTENT(IN)           :: FileRootName  !< Name of the file to write the output in (excluding extension)
+   INTEGER(IntKi),  INTENT(IN)           :: VTKcount      !< Indicates number for VTK output file (when 0, the routine will also write reference information)
 
-            ! Passed arguments
-         INTEGER(IntKi), INTENT(IN) :: ErrID       ! The error identifier (ErrStat)
-         CHARACTER(*),   INTENT(IN) :: Msg         ! The error message (ErrMsg)
+   INTEGER(IntKi),  INTENT(OUT)          :: ErrStat       !< Indicates whether an error occurred (see NWTC_Library)
+   CHARACTER(*),    INTENT(OUT)          :: ErrMsg        !< Error message associated with the ErrStat
+
+   ! local variables
+   INTEGER(IntKi)                        :: Un            ! fortran unit number
+   INTEGER(IntKi)                        :: i,j           ! loop counters
+   CHARACTER(1024)                       :: FileName
+      
+   INTEGER(IntKi)                        :: ErrStat2 
+   CHARACTER(ErrMsgLen)                  :: ErrMsg2
+   CHARACTER(*),PARAMETER                :: RoutineName = 'MeshWrVTK'
+   CHARACTER(*),PARAMETER                :: Orientation(3) = (/ 'OrientationX','OrientationY','OrientationZ' /)
+
+   
+   ErrStat = ErrID_None
+   ErrMsg  = ""
+
+   IF (.NOT. M%Initialized) RETURN
+   
+   !.................................................................
+   ! we'll write the mesh reference fields on the first timestep only:
+   !.................................................................
+   if (VTKcount == 0) then
+      call MeshWrVTKreference(M, FileRootName, ErrStat2, ErrMsg2)
+         call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+         if (ErrStat >= AbortErrLev) return
+   end if
+
+   !.................................................................
+   ! write the data that potentially changes each time step:
+   !.................................................................
+      
+   ! PolyData (.vtp) — Serial vtkPolyData (unstructured) file
+   FileName = TRIM(FileRootName)//'.t'//TRIM(Num2LStr(VTKcount))//'.vtp'
+      
+   CALL GetNewUnit( Un, ErrStat2, ErrMsg2 )      
+   CALL OpenFOutFile ( Un, TRIM(FileName), ErrStat2, ErrMsg2 )
+      call SetErrStat(ErrStat2,ErrMsg2,ErrStat,ErrMsg,RoutineName)
+      if (ErrStat >= AbortErrLev) return
+
+         
+      ! Write a VTP mesh file (Polygonal VTK file) with positions, lines, and field information
+      ! (note alignment of WRITE statements to make sure spaces are lined up in XML file)
+      WRITE(Un,'(A)')         '<?xml version="1.0"?>'
+      WRITE(Un,'(A)')         '<VTKFile type="PolyData" version="0.1" byte_order="LittleEndian">' ! bjj note: we don't have binary data in this file, so byte_order shouldn't matter, right?
+      WRITE(Un,'(A)')         '  <PolyData>'
+      WRITE(Un,'(2(A,i7),A)') '    <Piece NumberOfPoints="', M%Nnodes, '" NumberOfVerts="  0" NumberOfLines="', M%ElemTable(ELEMENT_LINE2)%nelem, '"'
+      WRITE(Un,'(A)')         '           NumberOfStrips="  0" NumberOfPolys="  0">'
+   
+! points (nodes):   
+      WRITE(Un,'(A)')         '      <Points>'
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%Position(:,i) + M%TranslationDisp(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '      </Points>'
+            
+! point data for any existing mesh fields:   
+      WRITE(Un,'(A)')         '      <PointData>'
+      
+   IF ( M%fieldmask(MASKID_FORCE) .AND. ALLOCATED(M%Force) ) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="Force" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%Force(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+   IF ( M%fieldmask(MASKID_MOMENT) .AND. ALLOCATED(M%Moment) ) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="Moment" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%Moment(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+   IF ( M%fieldmask(MASKID_TRANSLATIONVEL) .AND. ALLOCATED(M%TranslationVel)) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="TranslationalVelocity" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%TranslationVel(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+   IF ( M%fieldmask(MASKID_ROTATIONVEL) .AND. ALLOCATED(M%RotationVel)) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="RotationalVelocity" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%RotationVel(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+   IF ( M%fieldmask(MASKID_TRANSLATIONACC) .AND. ALLOCATED(M%TranslationAcc)) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="TranslationalAcceleration" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%TranslationAcc(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+   IF ( M%fieldmask(MASKID_ROTATIONACC) .AND. ALLOCATED(M%RotationAcc)) THEN
+      WRITE(Un,'(A)')         '        <DataArray type="Float32" Name="RotationalAcceleration" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%RotationAcc(:,i)
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
+
+IF (M%fieldmask(MASKID_ORIENTATION) .AND. ALLOCATED(M%Orientation)) THEN
+   DO j=1,3 
+      WRITE(Un,'(A,A,A)')   '        <DataArray type="Float32" Name="', Orientation(j), '" NumberOfComponents="3" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,VTK_AryFmt) M%Orientation(j,:,i)
+      END DO
+      WRITE(Un,'(A)')      '        </DataArray>'
+   END DO      
+END IF
+
+   IF ( M%fieldmask(MASKID_SCALAR) .AND. ALLOCATED(M%Scalars) .AND. M%nScalars > 0) THEN
+      WRITE(Un,'(A,I7,A)')         '        <DataArray type="Float32" Name="Scalars" NumberOfComponents="', M%nScalars, '" format="ascii">'
+      DO i=1,M%Nnodes
+         WRITE(Un,'('//trim(num2lstr(M%nScalars))//'(F20.6))') M%Scalars(:,i) ! not very efficient, but it's easy and I'm not sure anyone uses this field
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+   END IF
 
 
-         !.........................................................................................................................
-         ! Set error status/message;
-         !.........................................................................................................................
+      WRITE(Un,'(A)')         '      </PointData>'
 
-         IF ( ErrID /= ErrID_None ) THEN
+      
+! lines (i.e., elements; for line2 meshes only):
+   if ( M%ElemTable(ELEMENT_LINE2)%nelem > 0) then    
+      WRITE(Un,'(A)')         '      <Lines>'
+      WRITE(Un,'(A)')         '        <DataArray type="Int32" Name="connectivity" format="ascii">'
+      DO i=1,M%ElemTable(ELEMENT_LINE2)%nelem
+         WRITE(Un,'(2(i7))') M%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(1) - 1, M%ElemTable(ELEMENT_LINE2)%Elements(i)%ElemNodes(2) - 1
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '        <DataArray type="Int32" Name="offsets" format="ascii">'
+      DO i=1,M%ElemTable(ELEMENT_LINE2)%nelem
+         WRITE(Un,'(i7)') 2*i
+      END DO
+      WRITE(Un,'(A)')         '        </DataArray>'
+      WRITE(Un,'(A)')         '      </Lines>'
+   end if      
 
-            IF ( ErrStat /= ErrID_None ) ErrMsg = TRIM(ErrMsg)//NewLine
-            ErrMsg = TRIM(ErrMsg)//'MeshWrBin:'//TRIM(Msg)
-            ErrStat = MAX(ErrStat, ErrID)
-
-            !......................................................................................................................
-            ! Clean up if we're going to return on error: close file, deallocate local arrays
-            !......................................................................................................................
-            IF ( ErrStat >= AbortErrLev ) THEN
-            END IF
-
-         END IF
-
-      END SUBROUTINE CheckError
-      !............................................................................................................................
-   END SUBROUTINE MeshWrBin
-   !-------------------------------------------------------------------------------------------------------------------------------
-
-
+      WRITE(Un,'(A)')         '    </Piece>'
+      WRITE(Un,'(A)')         '  </PolyData>'
+      WRITE(Un,'(A)')         '</VTKFile>'
+      CLOSE(Un)         
+               
+      
+   END SUBROUTINE MeshWrVTK
+   
+!-------------------------------------------------------------------------------------------------------------------------------
+!> This routine writes mesh information in text form. It is used for debugging.
    SUBROUTINE MeshPrintInfo ( U, M, N)
-   
-      ! This routine writes mesh information in text form. If is used for debugging.
-   
-   
-     INTEGER, INTENT(IN   )                ::      U  ! fortran output unit
-     TYPE(MeshType),INTENT(IN   )          ::      M  ! mesh to be reported on
-     INTEGER, OPTIONAL,INTENT(IN   )       ::      N  ! Number to print, default 5
+         
+     INTEGER, INTENT(IN   )                ::      U  !< fortran output unit
+     TYPE(MeshType),INTENT(IN   )          ::      M  !< mesh to be reported on
+     INTEGER, OPTIONAL,INTENT(IN   )       ::      N  !< Number to print, default is all nodes
     ! Local
      INTEGER isz,i,j,nn,Ielement,Xelement
 
@@ -424,6 +629,10 @@ CONTAINS
 
    ! operations to create a mesh
 
+!> Takes a blank, uninitialized instance of Type(MeshType) and defines the number of nodes in the mesh. Optional 
+!! arguments indicate the fields that will be allocated and associated with the nodes of the mesh. The fields that may 
+!! be associated with the mesh nodes are Force, Moment, Orientation, Rotation, TranslationDisp, RotationVel, TranslationVel, 
+!! RotationAcc, TranslationAcc, and an arbitrary number of Scalars. See the definition of ModMeshType for descriptions of these fields.  
    SUBROUTINE MeshCreate ( BlankMesh                                                       &
                           ,IOS                                                             &
                           ,Nnodes                                                          &
@@ -442,32 +651,26 @@ CONTAINS
                           ,nScalars                                                        &
                           ,IsNewSibling                                                    &
                          )
-
-   
-      ! Takes a blank, uninitialized instance of Type(MeshType) and defines the number of nodes in the mesh. Optional 
-      ! arguments indicate the fields that will be allocated and associated with the nodes of the mesh. The fields that may 
-      ! be associated with the mesh nodes are Force, Moment, Orientation, Rotation, TranslationDisp, RotationVel, TranslationVel, 
-      ! RotationAcc, TranslationAcc, and an arbitrary number of Scalars. See the definition of ModMeshType for descriptions of these fields.  
-   
-      TYPE(MeshType), INTENT(INOUT)   :: BlankMesh ! Mesh to be created
-      INTEGER,INTENT(IN)         :: IOS                  ! input (COMPONENT_INPUT), output(COMPONENT_OUTPUT), or state(COMPONENT_STATE)
-      INTEGER,INTENT(IN)         :: Nnodes               ! Number of nodes in mesh
-      INTEGER(IntKi),INTENT(OUT) :: ErrStat              ! error status/level
-      CHARACTER(*),INTENT(OUT)   :: ErrMess              ! error message
+      
+      TYPE(MeshType), INTENT(INOUT)   :: BlankMesh !< Mesh to be created
+      INTEGER,INTENT(IN)         :: IOS                  !< input (COMPONENT_INPUT), output(COMPONENT_OUTPUT), or state(COMPONENT_STATE)
+      INTEGER,INTENT(IN)         :: Nnodes               !< Number of nodes in mesh
+      INTEGER(IntKi),INTENT(OUT) :: ErrStat              !< error status/level
+      CHARACTER(*),INTENT(OUT)   :: ErrMess              !< error message
                                    ! optional arguments from here down
                                    ! optional arguments that say whether to allocate fields
                                    ! in the mesh. These are always dimensioned npoints
-      LOGICAL,OPTIONAL,INTENT(IN):: Force                ! If present and true, allocate Force field
-      LOGICAL,OPTIONAL,INTENT(IN):: Moment               ! If present and true, allocate Moment field
-      LOGICAL,OPTIONAL,INTENT(IN):: Orientation          ! If present and true, allocate Orientation field
-      LOGICAL,OPTIONAL,INTENT(IN):: TranslationDisp      ! If present and true, allocate TranslationDisp field
-      LOGICAL,OPTIONAL,INTENT(IN):: TranslationVel       ! If present and true, allocate TranslationVel field
-      LOGICAL,OPTIONAL,INTENT(IN):: RotationVel          ! If present and true, allocate RotationVel field
-      LOGICAL,OPTIONAL,INTENT(IN):: TranslationAcc       ! If present and true, allocate TranslationAcc field
-      LOGICAL,OPTIONAL,INTENT(IN):: RotationAcc          ! If present and true, allocate RotationAcc field
+      LOGICAL,OPTIONAL,INTENT(IN):: Force                !< If present and true, allocate Force field
+      LOGICAL,OPTIONAL,INTENT(IN):: Moment               !< If present and true, allocate Moment field
+      LOGICAL,OPTIONAL,INTENT(IN):: Orientation          !< If present and true, allocate Orientation field
+      LOGICAL,OPTIONAL,INTENT(IN):: TranslationDisp      !< If present and true, allocate TranslationDisp field
+      LOGICAL,OPTIONAL,INTENT(IN):: TranslationVel       !< If present and true, allocate TranslationVel field
+      LOGICAL,OPTIONAL,INTENT(IN):: RotationVel          !< If present and true, allocate RotationVel field
+      LOGICAL,OPTIONAL,INTENT(IN):: TranslationAcc       !< If present and true, allocate TranslationAcc field
+      LOGICAL,OPTIONAL,INTENT(IN):: RotationAcc          !< If present and true, allocate RotationAcc field
 !
-      INTEGER,OPTIONAL,INTENT(IN):: nScalars             ! If present and > 0, allocate nScalars Scalars
-      LOGICAL,OPTIONAL,INTENT(IN):: IsNewSibling         ! If present and true, this is an new sibling so don't allocate new shared fields (RemapFlag, position, RefOrientation, and ElemTable)
+      INTEGER,OPTIONAL,INTENT(IN):: nScalars             !< If present and > 0, allocate nScalars Scalars
+      LOGICAL,OPTIONAL,INTENT(IN):: IsNewSibling         !< If present and true, this is an new sibling so don't allocate new shared fields (RemapFlag, position, RefOrientation, and ElemTable)
 
     ! Local
       INTEGER i
@@ -475,7 +678,9 @@ CONTAINS
 
       LOGICAL                    :: IsMotion
       LOGICAL                    :: IsLoad
-
+      INTEGER(IntKi)             :: ErrStat2 
+      CHARACTER(ErrMsgLen)       :: ErrMess2
+      CHARACTER(*),PARAMETER     :: RoutineName = 'MeshCreate'
 
          ! Local initializations:
 
@@ -486,12 +691,13 @@ CONTAINS
 
       IF ( mesh_debug ) print*,'Called MeshCreate'
 
-      CALL MeshDestroy( BlankMesh, ErrStat, ErrMess, .TRUE. )
+      CALL MeshDestroy( BlankMesh, ErrStat2, ErrMess2, .TRUE. )
                                                         ! make sure we're not leaving any pointers dangling
                                                         ! and nullify them for good measure
                                                         ! See comment on optional IgnoreSibling argument
                                                         ! in definition of MeshDestroy
-      IF (ErrStat >= AbortErrLev) RETURN
+      CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName) 
+         IF (ErrStat >= AbortErrLev) RETURN
 
       BlankMesh%initialized = .TRUE.
       BlankMesh%IOS         = IOS
@@ -507,19 +713,33 @@ CONTAINS
       IF ( PRESENT(IsNewSibling) ) IsNewSib = IsNewSibling
 
       IF ( .NOT. IsNewSib ) THEN
-         CALL AllocPAry( BlankMesh%Position, 3, Nnodes, 'MeshCreate: Position' )
-         CALL AllocPAry( BlankMesh%RefOrientation, 3, 3, Nnodes, 'MeshCreate: RefOrientation' )
+         CALL AllocPAry( BlankMesh%Position, 3, Nnodes, 'MeshCreate: Position', ErrStat2, ErrMess2 )
+            CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+         CALL AllocPAry( BlankMesh%RefOrientation, 3, 3, Nnodes, 'MeshCreate: RefOrientation', ErrStat2, ErrMess2 )
+            CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+            IF (ErrStat >= AbortErrLev) RETURN
             ! initialize these variables:
             BlankMesh%Position = 0.0_ReKi
-            CALL Eye(BlankMesh%RefOrientation, ErrStat, ErrMess)
-
-         ALLOCATE(BlankMesh%ElemTable(NELEMKINDS))
+            CALL Eye(BlankMesh%RefOrientation, ErrStat2, ErrMess2)
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)     
+            
+         ALLOCATE(BlankMesh%ElemTable(NELEMKINDS),STAT=ErrStat2)
+         IF (ErrStat2/=0) THEN
+            CALL SetErrStat(ErrID_Fatal, "Error allocating ElemTable.", ErrStat, ErrMess,RoutineName)     
+            RETURN
+         END IF
+         
+            
          DO i = 1, NELEMKINDS
             BlankMesh%ElemTable(i)%nelem = 0  ; BlankMesh%ElemTable(i)%maxelem = 0
             NULLIFY(BlankMesh%ElemTable(i)%Elements )
          ENDDO
 
-         ALLOCATE(BlankMesh%RemapFlag, Stat=ErrStat ) ! assign some space for this pointer to point to
+         ALLOCATE(BlankMesh%RemapFlag, Stat=ErrStat2 ) ! assign some space for this pointer to point to
+         IF (ErrStat2/=0) THEN
+            CALL SetErrStat(ErrID_Fatal, "Error allocating RemapFlag.", ErrStat, ErrMess,RoutineName)     
+            RETURN
+         END IF
          BlankMesh%RemapFlag = .true.
 
       ELSE
@@ -536,7 +756,8 @@ CONTAINS
 
       IF ( PRESENT(Force) ) THEN
          IF ( Force ) THEN
-            CALL AllocAry( BlankMesh%Force, 3, Nnodes, 'MeshCreate: Force', ErrStat, ErrMess )
+            CALL AllocAry( BlankMesh%Force, 3, Nnodes, 'MeshCreate: Force', ErrStat2, ErrMess2 )
+            CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
             IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%Force = 0.
             BlankMesh%FieldMask(MASKID_FORCE) = .TRUE.
@@ -546,7 +767,8 @@ CONTAINS
 
       IF ( PRESENT(Moment) ) THEN
          IF ( Moment ) THEN
-            CALL AllocAry( BlankMesh%Moment, 3, Nnodes, 'MeshCreate: Moment', ErrStat, ErrMess )
+            CALL AllocAry( BlankMesh%Moment, 3, Nnodes, 'MeshCreate: Moment', ErrStat2, ErrMess2 )
+            CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
             IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%Moment = 0.
             BlankMesh%FieldMask(MASKID_MOMENT) = .TRUE.
@@ -556,9 +778,11 @@ CONTAINS
 
       IF ( PRESENT(Orientation) ) THEN
          IF ( Orientation ) THEN
-            CALL AllocAry( BlankMesh%Orientation, 3, 3, Nnodes, 'MeshCreate: Orientation', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
-            CALL Eye(BlankMesh%Orientation, ErrStat, ErrMess)  ! set this orientation to the identity matrix
+            CALL AllocAry( BlankMesh%Orientation, 3, 3, Nnodes, 'MeshCreate: Orientation', ErrStat2,ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
+            CALL Eye(BlankMesh%Orientation, ErrStat2, ErrMess2)  ! set this orientation to the identity matrix
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
             BlankMesh%FieldMask(MASKID_ORIENTATION) = .TRUE.
             IsMotion = .TRUE.
          ENDIF
@@ -566,8 +790,9 @@ CONTAINS
 
       IF ( PRESENT(TranslationDisp) ) THEN
          IF ( TranslationDisp ) THEN
-            CALL AllocAry( BlankMesh%TranslationDisp, 3, Nnodes, 'MeshCreate: TranslationDisp', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationDisp, 3, Nnodes, 'MeshCreate: TranslationDisp', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationDisp = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONDISP) = .TRUE.
             IsMotion = .TRUE.
@@ -576,8 +801,9 @@ CONTAINS
 
       IF ( PRESENT(TranslationVel) ) THEN
          IF ( TranslationVel ) THEN
-            CALL AllocAry( BlankMesh%TranslationVel, 3, Nnodes, 'MeshCreate: TranslationVel', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationVel, 3, Nnodes, 'MeshCreate: TranslationVel', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationVel = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONVEL) = .TRUE.
             IsMotion = .TRUE.
@@ -586,8 +812,9 @@ CONTAINS
 
       IF ( PRESENT(RotationVel) ) THEN
          IF ( RotationVel ) THEN
-            CALL AllocAry( BlankMesh%RotationVel, 3, Nnodes, 'MeshCreate: RotationVel', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%RotationVel, 3, Nnodes, 'MeshCreate: RotationVel', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%RotationVel = 0.
             BlankMesh%FieldMask(MASKID_ROTATIONVEL) = .TRUE.
             IsMotion = .TRUE.
@@ -596,8 +823,9 @@ CONTAINS
 
       IF ( PRESENT(TranslationAcc) ) THEN
          IF ( TranslationAcc ) THEN
-            CALL AllocAry( BlankMesh%TranslationAcc, 3, Nnodes, 'MeshCreate: TranslationAcc', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationAcc, 3, Nnodes, 'MeshCreate: TranslationAcc', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationAcc = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONACC) = .TRUE.
             IsMotion = .TRUE.
@@ -606,8 +834,9 @@ CONTAINS
 
       IF ( PRESENT(RotationAcc) ) THEN
          IF ( RotationAcc ) THEN
-            CALL AllocAry( BlankMesh%RotationAcc, 3, Nnodes, 'MeshCreate: RotationAcc', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%RotationAcc, 3, Nnodes, 'MeshCreate: RotationAcc', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%RotationAcc = 0.
             BlankMesh%FieldMask(MASKID_ROTATIONACC) = .TRUE.
             IsMotion = .TRUE.
@@ -618,8 +847,9 @@ CONTAINS
       BlankMesh%nScalars = 0
       IF ( PRESENT(nScalars) ) THEN
          IF ( nScalars .GT. 0 ) THEN
-            CALL AllocAry( BlankMesh%Scalars, nScalars, Nnodes, 'MeshCreate: Scalars', ErrStat,ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%Scalars, nScalars, Nnodes, 'MeshCreate: Scalars', ErrStat2,ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%Scalars = 0.
             BlankMesh%FieldMask(MASKID_Scalar) = .TRUE.
             BlankMesh%nScalars = nScalars
@@ -631,27 +861,32 @@ CONTAINS
          !........................
          ! Let's make sure that we have all the necessary fields:
          !........................
+      !! This routine will add any required fields that were not explicitly requested.
+      !! If the mesh has motion fields and it is an input mesh, it must always have the following fields: TranslationDisp, TranslationVel, TranslationAcc
       IF ( IsMotion .AND. IOS == COMPONENT_INPUT ) THEN
 
          IF ( .NOT. BlankMesh%FieldMask(MASKID_TRANSLATIONDISP)) THEN
-            CALL AllocAry( BlankMesh%TranslationDisp, 3, Nnodes, 'MeshCreate: TranslationDisp', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationDisp, 3, Nnodes, 'MeshCreate: TranslationDisp', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationDisp = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONDISP) = .TRUE.
             !CALL SetErrStat(ErrID_Info, 'Meshes with motion fields must also contain the TranslationDisp field.',ErrStat,ErrMsg,'MeshCreate')
          ENDIF
 
          IF ( .NOT. BlankMesh%FieldMask(MASKID_TRANSLATIONVEL)) THEN
-            CALL AllocAry( BlankMesh%TranslationVel, 3, Nnodes, 'MeshCreate: TranslationVel', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationVel, 3, Nnodes, 'MeshCreate: TranslationVel', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationVel = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONVEL) = .TRUE.
             !CALL SetErrStat(ErrID_Info, 'Meshes with motion fields must also contain the TranslationVel field.',ErrStat,ErrMsg,'MeshCreate')
          ENDIF
          
          IF ( .NOT. BlankMesh%FieldMask(MASKID_TRANSLATIONACC)) THEN
-            CALL AllocAry( BlankMesh%TranslationAcc, 3, Nnodes, 'MeshCreate: TranslationAcc', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%TranslationAcc, 3, Nnodes, 'MeshCreate: TranslationAcc', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%TranslationAcc = 0.
             BlankMesh%FieldMask(MASKID_TRANSLATIONACC) = .TRUE.
             !CALL SetErrStat(ErrID_Info, 'Meshes with motion fields must also contain the TranslationAcc field.',ErrStat,ErrMsg,'MeshCreate')
@@ -659,11 +894,13 @@ CONTAINS
                            
       END IF
       
+      !! If the mesh has load fields and it is an input mesh, it must always have the following fields: Moment
       IF ( IsLoad .AND. IOS == COMPONENT_INPUT ) THEN
                
          IF ( .NOT. BlankMesh%FieldMask(MASKID_MOMENT)) THEN
-            CALL AllocAry( BlankMesh%Moment, 3, Nnodes, 'MeshCreate: Moment', ErrStat, ErrMess )
-            IF (ErrStat >= AbortErrLev) RETURN
+            CALL AllocAry( BlankMesh%Moment, 3, Nnodes, 'MeshCreate: Moment', ErrStat2, ErrMess2 )
+               CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess,RoutineName)          
+               IF (ErrStat >= AbortErrLev) RETURN
             BlankMesh%Moment = 0.
             BlankMesh%FieldMask(MASKID_MOMENT) = .TRUE.
             !CALL SetErrStat(ErrID_Info, 'Meshes with load fields must also contain the Moment field.',ErrStat,ErrMsg,'MeshCreate')
@@ -676,23 +913,23 @@ CONTAINS
 
    END SUBROUTINE MeshCreate
 
+!> Destroy the given mesh and deallocate all of its data. If the optional IgnoreSibling argument 
+!! is set to TRUE, destroying a sibling in a set has no effect on the other siblings other than 
+!! to remove the victim from the list of siblings. If IgnoreSibling is omitted or is set to FALSE, 
+!! all of the other siblings in the set will be destroyed as well.
    RECURSIVE SUBROUTINE MeshDestroy ( Mesh, ErrStat, ErrMess, IgnoreSibling )
-    ! Destroy the given mesh and deallocate all of its data. If the optional IgnoreSibling argument 
-    ! is set to TRUE, destroying a sibling in a set has no effect on the other siblings other than 
-    ! to remove the victim from the list of siblings. If IgnoreSibling is omitted or is set to FALSE, 
-    ! all of the other siblings in the set will be destroyed as well.
 
-     TYPE(MeshType),  INTENT(INOUT) :: Mesh            ! Mesh to be vaporized
-     INTEGER(IntKi),  INTENT(OUT)   :: ErrStat         ! Error status/code
-     CHARACTER(*),    INTENT(OUT)   :: ErrMess         ! Error message
+     TYPE(MeshType),  INTENT(INOUT) :: Mesh            !< Mesh to be vaporized
+     INTEGER(IntKi),  INTENT(OUT)   :: ErrStat         !< Error status/code
+     CHARACTER(*),    INTENT(OUT)   :: ErrMess         !< Error message
     ! On a brand new mesh, the pointers to siblings may not be nullified and
     ! thus undefined (which may cause ASSOCIATED to report .true. erroneously)
-    ! This despite use of => NULL in declaration of this fields for MeshType. Sigh.
-    ! So if IgnoreSibling is present and true, don't follow the sibling pointers.
-    ! Instead just unconditionally nullify these.
-    ! Use this carefully, since it can leave dangling memory if used for a
-    ! mesh that already exists and has existing siblings.
-     LOGICAL, INTENT(IN), OPTIONAL :: IgnoreSibling
+    ! This despite use of => NULL in declaration of this fields for MeshType. Sigh. (15-dec-2015 bjj: not sure this is true; some fields didn't use => NULL)
+    ! So ...
+     LOGICAL, INTENT(IN), OPTIONAL :: IgnoreSibling    !< if IgnoreSibling is present and true, don't follow the sibling pointers.
+                                                       !! Instead just unconditionally nullify these.
+                                                       !! Use this carefully, since it can leave dangling memory if used for a
+                                                       !! mesh that already exists and has existing siblings. 
 
     ! Local
       LOGICAL IgSib
@@ -820,460 +1057,501 @@ CONTAINS
 !     7        FieldMask                           FIELDMASK_SIZE
 !     7+$7     Table Entries                       $5 * SIZE(ElemRecType)
 !
-   SUBROUTINE MeshPack ( Mesh, ReBuf, DbBuf, IntBuf , ErrStat, ErrMess, SizeOnly )
-      ! Given a mesh and allocatable buffers of type INTEGER(IntKi), REAL(ReKi), and REAL(DbKi), 
-      ! return the mesh information compacted into consecutive elements of the corresponding buffers. 
-      ! This would be done to allow subsequent writing of the buffers to a file for restarting later. 
-      ! The sense of the name is "pack the data from the mesh into buffers". IMPORTANT: MeshPack 
-      ! allocates the three buffers. It is incumbent upon the calling program to deallocate the 
-      ! buffers when they are no longer needed. For sibling meshes, MeshPack should be called 
-      ! separately for each sibling, because the fields allocated with the siblings are separate 
-      ! and unique to each sibling.
+!> Given a mesh and allocatable buffers of type INTEGER(IntKi), REAL(ReKi), and REAL(DbKi), 
+!! return the mesh information compacted into consecutive elements of the corresponding buffers. 
+!! This would be done to allow subsequent writing of the buffers to a file for restarting later. 
+!! The sense of the name is "pack the data from the mesh into buffers". IMPORTANT: MeshPack 
+!! allocates the three buffers. It is incumbent upon the calling program to deallocate the 
+!! buffers when they are no longer needed. For sibling meshes, MeshPack should be called 
+!! separately for each sibling, because the fields allocated with the siblings are separate 
+!! and unique to each sibling.
+   SUBROUTINE MeshPack ( Mesh, ReKiBuf, DbKiBuf, IntKiBuf , ErrStat, ErrMess, SizeOnly )
    
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being packed
-     REAL(ReKi),     ALLOCATABLE, INTENT(  OUT) :: ReBuf(:)  ! Real buffer
-     REAL(DbKi),     ALLOCATABLE, INTENT(  OUT) :: DbBuf(:)  ! Double buffer
-     INTEGER(IntKi), ALLOCATABLE, INTENT(  OUT) :: IntBuf(:) ! Int buffer
+     TYPE(MeshType),              INTENT(IN   ) :: Mesh        ! Mesh being packed
+     REAL(ReKi),     ALLOCATABLE, INTENT(  OUT) :: ReKiBuf(:)  ! Real buffer
+     REAL(DbKi),     ALLOCATABLE, INTENT(  OUT) :: DbKiBuf(:)  ! Double buffer
+     INTEGER(IntKi), ALLOCATABLE, INTENT(  OUT) :: IntKiBuf(:) ! Int buffer
      INTEGER(IntKi),              INTENT(  OUT) :: ErrStat
      CHARACTER(*),                INTENT(  OUT) :: ErrMess
      LOGICAL,OPTIONAL,            INTENT(IN   ) :: SizeOnly
+     
    ! Local
-     INTEGER i,ic,nelem,n_int,n_re,n_db,ii,jj,CtrlCode,x
-     INTEGER Ielement, Xelement
-     TYPE(ElemRecType), POINTER :: ElemRec
-     LOGICAL SzOnly
+     INTEGER(IntKi)                             :: Re_BufSz      ! number of reals in the buffer
+     INTEGER(IntKi)                             :: Re_Xferred    ! number of reals transferred
+     INTEGER(IntKi)                             :: Db_BufSz      ! number of doubles in the buffer
+     INTEGER(IntKi)                             :: Db_Xferred    ! number of doubles transferred
+     INTEGER(IntKi)                             :: Int_BufSz     ! number of integers in the buffer
+     INTEGER(IntKi)                             :: Int_Xferred   ! number of integers transferred
+   
+   
+     INTEGER i,j, nelemnodes
+     LOGICAL OnlySize
+     INTEGER(IntKi)                             :: ErrStat2
+     !CHARACTER(1024)                            :: ErrMess2
+     CHARACTER(*),      PARAMETER               :: RoutineName = "MeshPack"   
 
-     SzOnly = .FALSE.
-     IF ( PRESENT(SizeOnly) ) SzOnly = SizeOnly
+     
+     ErrStat = ErrID_None
+     ErrMess = ""
+     
+     OnlySize = .FALSE.
+     IF ( PRESENT(SizeOnly) ) OnlySize = SizeOnly
 
 
-!bjj: if we modify the code below to check if things are allocated/etc we can remove this requirement (and then we have to rethink the unpack)
-     IF (.NOT. Mesh%Committed ) THEN
-        ErrStat = ErrID_Fatal
-        ErrMess = " MeshPack: Uncommitted meshes cannot be packed."
-        RETURN
+     ! bjj: figure out what to do about sibling meshes... (for now, I'm going to ignore them)
+     
+     !.........................................
+     ! get number of integer values
+     !.........................................
+      IF (.NOT. Mesh%Initialized) THEN ! we don't need to store any data; it's a blank mesh
+         Int_BufSz = 1
+      ELSE ! initialized, may or may not be committed           
+         Int_BufSz =  3                & ! number of logicals in MeshType (initialized, committed, RemapFlag)
+                     + FIELDMASK_SIZE  & ! number of logicals in MeshType (fieldmask)
+                     + 4                 ! number of non-pointer integers (ios, nnodes, nextelem, nscalars)
+         
+         !......
+         ! we'll store the element structure (and call MeshCommit on Unpack if necessary to get the remaining fields like det_jac)
+         !......
+         DO i = 1, NELEMKINDS
+
+            Int_BufSz = Int_BufSz+1 ! Mesh%ElemTable(i)%nelem
+            if (Mesh%ElemTable(i)%nelem > 0) Int_BufSz = Int_BufSz+1 ! number of nodes in this kind of element            
+                  
+            DO j = 1, Mesh%ElemTable(i)%nelem            
+               !Int_BufSz = Int_BufSz+1 ! which kind of element 
+               !Int_BufSz = Int_BufSz+1 ! skip Nneighbors until that's implemented (as well as neighbor list)
+               Int_BufSz = Int_BufSz + SIZE( Mesh%ElemTable(i)%Elements(j)%ElemNodes ) ! nodes in this element                     
+            END DO
+         
+         END DO             
+         
+      END IF
+      
+     !.........................................
+     ! get number of real values
+     !.........................................
+     Re_BufSz = 0
+     IF (Mesh%Initialized) THEN
+        Re_BufSz = Re_BufSz + Mesh%Nnodes * 3 ! Position
+        !Re_BufSz = Re_BufSz + Mesh%Nnodes * 9 ! RefOrientation
+        IF ( Mesh%FieldMask(MASKID_FORCE) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%FieldMask(MASKID_MOMENT) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        !IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 9
+        !IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%FieldMask(MASKID_TRANSLATIONACC) ) Re_BufSz = Re_BufSz + Mesh%Nnodes * 3
+        IF ( Mesh%nScalars .GT. 0 ) Re_BufSz = Re_BufSz + Mesh%Nnodes * Mesh%nScalars
      END IF
+     
+     !.........................................
+     ! get number of double values (none now)
+     !.........................................
+     Db_BufSz = 0
+     IF (Mesh%Initialized) THEN
+        Db_BufSz = Db_BufSz + Mesh%Nnodes * 9 ! RefOrientation
+        IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) Db_BufSz = Db_BufSz + Mesh%Nnodes * 9
+        IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) Db_BufSz = Db_BufSz + Mesh%Nnodes * 3
+     END IF 
+     
+     !.........................................
+     ! allocate buffer arrays
+     !.........................................          
+     IF ( Re_BufSz  .GT. 0 ) THEN 
+        ALLOCATE( ReKiBuf(  Re_BufSz  ), STAT=ErrStat2 )
+        IF (ErrStat2 /= 0) THEN 
+          CALL SetErrStat(ErrID_Fatal, 'Error allocating ReKiBuf.', ErrStat, ErrMess,RoutineName)
+          RETURN
+        END IF
+     END IF
+     IF ( Db_BufSz  .GT. 0 ) THEN 
+        ALLOCATE( DbKiBuf(  Db_BufSz  ), STAT=ErrStat2 )
+        IF (ErrStat2 /= 0) THEN 
+          CALL SetErrStat(ErrID_Fatal, 'Error allocating DbKiBuf.', ErrStat, ErrMess,RoutineName)
+          RETURN
+        END IF
+     END IF
+     IF ( Int_BufSz  .GT. 0 ) THEN 
+        ALLOCATE( IntKiBuf(  Int_BufSz  ), STAT=ErrStat2 )
+        IF (ErrStat2 /= 0) THEN 
+          CALL SetErrStat(ErrID_Fatal, 'Error allocating IntKiBuf.', ErrStat, ErrMess,RoutineName)
+          RETURN
+        END IF
+     END IF
+     IF(OnlySize) RETURN ! return early if only trying to allocate buffers (not pack them)
 
-    ! Traverse the element list and calculate size needed to store element records
-     n_int = 0
-     nelem = 0
-     CtrlCode = 0
-     CALL MeshNextElement( Mesh, CtrlCode, ErrStat, ErrMess, Ielement=Ielement, Xelement=Xelement, ElemRec=ElemRec )
-     IF (ErrStat >= AbortErrLev) RETURN
-
-     DO WHILE ( CtrlCode .NE. MESH_NOMORE )
-       nelem = nelem + 1
-       n_int = n_int + 1                       ! add word for element kind
-       n_int = n_int + 1                       ! add word for number of nodes
-       n_int = n_int + NumNodes( Xelement )    ! space for nodes in this element
-!#if 0
-! TODO
-!       n_int = n_int + ElemRec%Nneighbors         ! space for neighbor list, stored as element indices
-!#endif
-       CtrlCode = MESH_NEXT
-       CALL MeshNextElement( Mesh, CtrlCode, ErrStat, ErrMess, Ielement=Ielement, Xelement=Xelement )
-       IF (ErrStat >= AbortErrLev) RETURN
-
-     ENDDO
-     n_int = n_int + HDR_FIRSTELEM + FIELDMASK_SIZE  ! add space for header
-     ALLOCATE( IntBuf( n_int ) )
-
-     n_re = 0
-     n_re = n_re + Mesh%Nnodes * 3 ! Position
-     n_re = n_re + Mesh%Nnodes * 9 ! RefOrientation
-     IF ( Mesh%FieldMask(MASKID_FORCE) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_MOMENT) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) n_re = n_re + Mesh%Nnodes * 9
-     IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONACC) ) n_re = n_re + Mesh%Nnodes * 3
-     IF ( Mesh%nScalars .GT. 0 ) n_re = n_re + Mesh%Nnodes * Mesh%nScalars
-
-     ALLOCATE( ReBuf( n_re ) )
-
-     n_db = 0  ! unused for now
-
-     IF ( .NOT. SzOnly ) THEN
-
-       ! Actually pack the Int buffer
-       IntBuf(HDR_INTBUFSIZE) = BYTES_IN_INT  * n_int
-       IntBuf(HDR_REALBUFSIZE) = BYTES_IN_REAL * n_re
-       IntBuf(HDR_DBLBUFSIZE) = BYTES_IN_DBL  * n_db
-       IntBuf(HDR_IOS) = Mesh%IOS
-       IntBuf(HDR_NUMNODES) = Mesh%Nnodes
-       IntBuf(HDR_NUMELEMREC) = nelem
-       DO i =0,FIELDMASK_SIZE-1
-         x = 0 ; IF ( Mesh%FieldMask(i+1) ) x = 1   ! convert logical to ints
-         IntBuf(HDR_FIELDMASK+i) = x
-       ENDDO
-       !ic = FIELDMASK_SIZE+HDR_FIXEDLEN+1
-       ic = HDR_FIRSTELEM
-       CtrlCode = 0
-       CALL MeshNextElement( Mesh, CtrlCode, ErrStat, ErrMess, Ielement=Ielement, Xelement=Xelement, ElemRec=ElemRec )
-       IF (ErrStat >= AbortErrLev) RETURN
-
-       DO WHILE ( CtrlCode .NE. MESH_NOMORE )
-         IntBuf(ic) = Xelement ; ic = ic + 1
-         IntBuf(ic) = NumNodes(Xelement) ; ic = ic + 1
-         DO i = 1,NumNodes(Xelement)
-           IntBuf(ic) = ElemRec%ElemNodes(i)
-           ic = ic + 1
-         ENDDO
-!#if 0
-! TODO
-!         DO i = 1,ElemRec%Nneighbors
-!           IntBuf(ic) = 0 !   ElemRec%Neighbors(i)
-!           ic = ic + 1
-!         ENDDO
-!#endif
-         CtrlCode = MESH_NEXT
-         CALL MeshNextElement( Mesh, CtrlCode, ErrStat, ErrMess, Ielement=Ielement, Xelement=Xelement, ElemRec=ElemRec )
-         IF (ErrStat >= AbortErrLev) RETURN
-
-       ENDDO
-
-       ! Actually pack the Real buffer
-       ic = 1
-       DO i = 1, Mesh%Nnodes
-         ReBuf(ic) = Mesh%Position(1,i) ; ic = ic + 1
-         ReBuf(ic) = Mesh%Position(2,i) ; ic = ic + 1
-         ReBuf(ic) = Mesh%Position(3,i) ; ic = ic + 1
-       ENDDO
-
-
-       DO i = 1, Mesh%Nnodes
-         DO jj = 1,3
-            DO ii = 1,3
-               ReBuf(ic) = Mesh%RefOrientation(ii,jj,i) ; ic = ic + 1
+     
+     !.........................................
+     ! store data in buffer arrays
+     !.........................................     
+     Re_Xferred  = 1
+     Db_Xferred  = 1
+     Int_Xferred = 1        
+     
+     ! ..... fill IntKiBuf .....
+     
+      IF (.NOT. Mesh%Initialized) THEN ! we don't need to store any data; it's a blank mesh
+         IntKiBuf(Int_Xferred) = 0; ;  Int_Xferred = Int_Xferred + 1
+      ELSE ! initialized, may or may not be committed                    
+            ! transfer the logicals
+         IntKiBuf(Int_Xferred) = 1;   Int_Xferred = Int_Xferred + 1 
+         IntKiBuf(Int_Xferred) = TRANSFER( Mesh%committed, IntKiBuf(1) );  Int_Xferred = Int_Xferred + 1 
+         IntKiBuf(Int_Xferred:Int_Xferred+FIELDMASK_SIZE-1) = TRANSFER( Mesh%fieldmask, IntKiBuf(Int_Xferred:Int_Xferred+FIELDMASK_SIZE-1) );  Int_Xferred = Int_Xferred + FIELDMASK_SIZE
+         IntKiBuf(Int_Xferred) = TRANSFER( Mesh%RemapFlag, IntKiBuf(1) );  Int_Xferred = Int_Xferred + 1        
+            ! integers
+         IntKiBuf(Int_Xferred) = Mesh%ios;           Int_Xferred = Int_Xferred + 1 
+         IntKiBuf(Int_Xferred) = Mesh%nnodes;        Int_Xferred = Int_Xferred + 1 
+         IntKiBuf(Int_Xferred) = Mesh%nextelem;      Int_Xferred = Int_Xferred + 1 
+         IntKiBuf(Int_Xferred) = Mesh%nscalars;      Int_Xferred = Int_Xferred + 1 
+         
+            ! element structure
+         DO i = 1, NELEMKINDS
+            
+            IntKiBuf(Int_Xferred) = Mesh%ElemTable(i)%nelem;      Int_Xferred = Int_Xferred + 1 ! number of elements
+            
+            if (Mesh%ElemTable(i)%nelem > 0) then
+               nelemnodes = SIZE( Mesh%ElemTable(i)%Elements(1)%ElemNodes );
+               IntKiBuf(Int_Xferred) = nelemnodes; Int_Xferred = Int_Xferred + 1 ! nodes per element
+                                          
+                  ! nodes in this element
+               DO j = 1, Mesh%ElemTable(i)%nelem            
+                  IntKiBuf(Int_Xferred:Int_Xferred+nelemnodes-1) = Mesh%ElemTable(i)%Elements(j)%ElemNodes; Int_Xferred = Int_Xferred + nelemnodes 
+               END DO
+            end if
+         
+         END DO             
+         
+      END IF         
+     
+     ! ..... fill ReKiBuf and DbKiBuf .....
+     IF (Mesh%Initialized) THEN
+         DO i = 1, Mesh%Nnodes ! Position
+            ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%Position(:,i); Re_Xferred = Re_Xferred + 3
+         END DO
+         DO i = 1, Mesh%Nnodes ! RefOrientation
+            DO j = 1,3
+               DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%RefOrientation(:,j,i); Db_Xferred = Db_Xferred + 3
             ENDDO
-         ENDDO
-       ENDDO
-
-       IF ( Mesh%FieldMask(MASKID_FORCE) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%Force(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%Force(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%Force(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_MOMENT) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%Moment(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%Moment(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%Moment(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) THEN ! n_re = n_re + Mesh%Nnodes * 9
-         DO i = 1, Mesh%Nnodes
-           DO jj = 1,3
-             DO ii = 1,3
-               ReBuf(ic) = Mesh%Orientation(ii,jj,i) ; ic = ic + 1
-             ENDDO
-           ENDDO
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%TranslationDisp(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationDisp(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationDisp(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%RotationVel(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%RotationVel(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%RotationVel(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%TranslationVel(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationVel(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationVel(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%RotationAcc(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%RotationAcc(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%RotationAcc(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%FieldMask(MASKID_TRANSLATIONACC) ) THEN ! n_re = n_re + Mesh%Nnodes * 3
-         DO i = 1, Mesh%Nnodes
-           ReBuf(ic) = Mesh%TranslationAcc(1,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationAcc(2,i) ; ic = ic + 1
-           ReBuf(ic) = Mesh%TranslationAcc(3,i) ; ic = ic + 1
-         ENDDO
-       ENDIF
-       IF ( Mesh%nScalars .GT. 0 ) THEN ! n_re = n_re + Mesh%Nnodes * Mesh%nScalar
-         DO i = 1, Mesh%Nnodes
-           DO ii = 1,Mesh%nScalars
-             ReBuf(ic) = Mesh%Scalars(ii,i) ; ic = ic + 1
-           ENDDO
-         ENDDO
-       ENDIF
-     ENDIF
-     ALLOCATE( DbBuf( 1 ) )  ! dummy allocation
-
+         END DO
+                
+         IF ( Mesh%FieldMask(MASKID_FORCE) ) THEN ! Force
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%Force(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_MOMENT) ) THEN ! Moment
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%Moment(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) THEN ! Orientation
+            DO i = 1, Mesh%Nnodes 
+               DO j = 1,3
+                  DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%Orientation(:,j,i); Db_Xferred = Db_Xferred + 3
+               ENDDO
+            END DO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) THEN ! TranslationDisp
+            DO i = 1, Mesh%Nnodes
+               DbKiBuf(Db_Xferred:Db_Xferred+2) = Mesh%TranslationDisp(:,i); Db_Xferred = Db_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) THEN ! RotationVel
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%RotationVel(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) THEN ! TranslationVel
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%TranslationVel(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) THEN ! RotationAcc
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%RotationAcc(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         IF ( Mesh%FieldMask(MASKID_TRANSLATIONACC) ) THEN ! TranslationAcc
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+2) = Mesh%TranslationAcc(:,i); Re_Xferred = Re_Xferred + 3
+            ENDDO
+         ENDIF
+         
+         IF ( Mesh%nScalars .GT. 0 ) THEN ! n_re = n_re + Mesh%Nnodes * Mesh%nScalar
+            DO i = 1, Mesh%Nnodes
+               ReKiBuf(Re_Xferred:Re_Xferred+Mesh%nScalars-1) = Mesh%Scalars(:,i); Re_Xferred = Re_Xferred + Mesh%nScalars
+            ENDDO
+         ENDIF         
+         
+     END IF
+     
      !bjj: where are we keeping track of which ones are siblings so that we can unpack them (set pointers) properly for restart?
    END SUBROUTINE MeshPack
 
-   SUBROUTINE MeshUnpack( Mesh, Re_Buf, Db_Buf, Int_Buf, ErrStat, ErrMess )
-      ! Given a blank, uncreated mesh and buffers of type INTEGER(IntKi), REAL(ReKi), and 
-      ! REAL(DbKi), unpack the mesh information from the buffers. This would be done to 
-      ! recreate a mesh after reading in the buffers on a restart of the program. The sense 
-      ! of the name is "unpack the mesh from buffers." The resulting mesh will be returned 
-      ! in the exact state as when the data in the buffers was packed using MeshPack. 
+!> Given a blank, uncreated mesh and buffers of type INTEGER(IntKi), REAL(ReKi), and 
+!! REAL(DbKi), unpack the mesh information from the buffers. This would be done to 
+!! recreate a mesh after reading in the buffers on a restart of the program. The sense 
+!! of the name is "unpack the mesh from buffers." The resulting mesh will be returned 
+!! in the exact state as when the data in the buffers was packed using MeshPack. 
+   SUBROUTINE MeshUnpack( Mesh, ReKiBuf, DbKiBuf, IntKiBuf, ErrStat, ErrMess )
       
       ! bjj: not implemented yet:  
       ! If the mesh has an already recreated sibling mesh from a previous call to MeshUnpack, specify 
       ! the existing sibling as an optional argument so that the sibling relationship is also recreated.
    
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh
-     REAL(ReKi),     ALLOCATABLE, INTENT(IN   ) :: Re_Buf(:)
-     REAL(DbKi),     ALLOCATABLE, INTENT(IN   ) :: Db_Buf(:)
-     INTEGER(IntKi), ALLOCATABLE, INTENT(IN   ) :: Int_Buf(:)
-     INTEGER(IntKi),              INTENT(  OUT) :: ErrStat
-     CHARACTER(*),                INTENT(  OUT) :: ErrMess
+      TYPE(MeshType),              INTENT(INOUT) :: Mesh
+      REAL(ReKi),     ALLOCATABLE, INTENT(IN   ) :: ReKiBuf(:)
+      REAL(DbKi),     ALLOCATABLE, INTENT(IN   ) :: DbKiBuf(:)
+      INTEGER(IntKi), ALLOCATABLE, INTENT(IN   ) :: IntKiBuf(:)
+      INTEGER(IntKi),              INTENT(  OUT) :: ErrStat
+      CHARACTER(*),                INTENT(  OUT) :: ErrMess
 
-   ! Local
-     LOGICAL Force, Moment, Orientation, TranslationDisp, TranslationVel, RotationVel, TranslationAcc, RotationAcc
-     INTEGER nScalars
-     INTEGER i,ic,ii,jj,nelemnodes
-     INTEGER Xelement
-     !TYPE(ElemRecType), POINTER :: ElemRec
+         ! Local
+      LOGICAL committed, RemapFlag, fieldmask(FIELDMASK_SIZE)
+      INTEGER nScalars, ios, nnodes, nextelem, nelemnodes, nelem
+      INTEGER i,j
+     
+      INTEGER(IntKi)                             :: Re_Xferred    ! number of reals transferred
+      INTEGER(IntKi)                             :: Db_Xferred    ! number of doubles transferred
+      INTEGER(IntKi)                             :: Int_Xferred   ! number of integers transferred
+      
+      INTEGER(IntKi)                             :: ErrStat2
+      CHARACTER(1024)                            :: ErrMess2
+      CHARACTER(*),      PARAMETER               :: RoutineName = "MeshUnpack"        
+     
+      Re_Xferred  = 1
+      Db_Xferred  = 1
+      Int_Xferred = 1
 
-     Force = .FALSE.
-     Moment = .FALSE.
-     Orientation = .FALSE.
-     TranslationDisp = .FALSE.
-     TranslationVel = .FALSE.
-     RotationVel = .FALSE.
-     TranslationAcc = .FALSE.
-     RotationAcc = .FALSE.
-     nScalars = 0
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_FORCE-1)       .EQ. 1 ) Force = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_MOMENT-1)      .EQ. 1 ) Moment = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_ORIENTATION-1) .EQ. 1 ) Orientation = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_TRANSLATIONDISP-1) .EQ. 1 ) TranslationDisp = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_TRANSLATIONVEL-1) .EQ. 1 ) TranslationVel = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_ROTATIONVEL-1)    .EQ. 1 ) RotationVel = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_TRANSLATIONACC-1) .EQ. 1 ) TranslationAcc = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_ROTATIONACC-1)    .EQ. 1 ) RotationAcc = .TRUE.
-     IF ( Int_Buf(HDR_FIELDMASK+MASKID_SCALAR-1)      .GT. 0 ) nScalars = Int_Buf(HDR_FIELDMASK+MASKID_SCALAR-1)
+      ErrStat = ErrID_None
+      ErrMess = ""
+     
+      IF (IntKiBuf(Int_Xferred) == 0 ) THEN ! this is a blank mesh
+         CALL MeshDestroy( Mesh, ErrStat2, ErrMess2, .TRUE. )
+         CALL SetErrStat(ErrStat2,ErrMess2,ErrStat,ErrMess,RoutineName)
+         RETURN
+      END IF
+      
+      
+         ! initialized, may or may not be committed           
+            
+      Mesh%initialized = .true.; Int_Xferred = Int_Xferred + 1
+      committed        = TRANSFER( IntKiBuf(Int_Xferred), Mesh%committed );  Int_Xferred = Int_Xferred + 1 
+      fieldmask        = TRANSFER( IntKiBuf(Int_Xferred:Int_Xferred+FIELDMASK_SIZE-1), fieldmask );  Int_Xferred = Int_Xferred + FIELDMASK_SIZE 
+      RemapFlag        = TRANSFER( IntKiBuf(Int_Xferred), Mesh%RemapFlag ); Int_Xferred = Int_Xferred + 1 
+         ! integers
+      ios              = IntKiBuf(Int_Xferred) ; Int_Xferred = Int_Xferred + 1 
+      nnodes           = IntKiBuf(Int_Xferred) ; Int_Xferred = Int_Xferred + 1 
+      nextelem         = IntKiBuf(Int_Xferred) ; Int_Xferred = Int_Xferred + 1 
+      nscalars         = IntKiBuf(Int_Xferred) ; Int_Xferred = Int_Xferred + 1 
+                  
+                                                            
+      CALL MeshCreate( Mesh, ios, nnodes                                         &
+                        ,ErrStat=ErrStat2, ErrMess=ErrMess2                      &
+                        ,Force          =fieldmask(MASKID_FORCE)                 &
+                        ,Moment         =fieldmask(MASKID_MOMENT)                &
+                        ,Orientation    =fieldmask(MASKID_ORIENTATION)           &
+                        ,TranslationDisp=fieldmask(MASKID_TRANSLATIONDISP)       &
+                        ,TranslationVel =fieldmask(MASKID_TRANSLATIONVEL )       &
+                        ,RotationVel    =fieldmask(MASKID_ROTATIONVEL )          &
+                        ,TranslationAcc =fieldmask(MASKID_TRANSLATIONACC )       &
+                        ,RotationAcc    =fieldmask(MASKID_ROTATIONACC )          &
+                        ,nScalars       = nScalars                               &
+                     )
+         CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess, RoutineName)
+         IF (ErrStat >= AbortErrLev) RETURN
 
-     CALL MeshCreate( Mesh, Int_Buf(HDR_IOS), Int_Buf(HDR_NUMNODES)                    &
-                     ,ErrStat=ErrStat, ErrMess=ErrMess                                 &
-                     ,Force=Force, Moment=Moment, Orientation=Orientation              &
-                     ,TranslationDisp=TranslationDisp                                  &
-                     ,TranslationVel=TranslationVel, RotationVel=RotationVel           &
-                     ,TranslationAcc=TranslationAcc, RotationAcc=RotationAcc           &
-                     , nScalars = nScalars                                             &
-                    )
-     IF (ErrStat >= AbortErrLev) RETURN
+      Mesh%RemapFlag = RemapFlag
+      Mesh%nextelem  = nextelem
+     
+            ! element structure
+      DO i = 1, NELEMKINDS            
+         nelem = IntKiBuf(Int_Xferred);      Int_Xferred = Int_Xferred + 1    ! number of elements            
+            
+         if (nelem > 0) then
+            nelemnodes = IntKiBuf(Int_Xferred); Int_Xferred = Int_Xferred + 1 ! nodes per element
+                                                                             
+               ! nodes in this element
+            DO j = 1,nelem                                                                     
+               
+               SELECT CASE (nelemnodes)
+               CASE (1)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred  )                                                             &
+                  )
+               CASE (2)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1)                               &
+                  )
+               CASE (3)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  )
+               CASE (4)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3)                                                            &
+                  )
+               CASE (6)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3),P5 =IntKiBuf(Int_Xferred+ 4),P6 =IntKiBuf(Int_Xferred+ 5)  &
+                  )
+               CASE (8)
+                  CALL MeshConstructElement( Mesh, i, ErrStat2, ErrMess2                                    &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3),P5 =IntKiBuf(Int_Xferred+ 4),P6 =IntKiBuf(Int_Xferred+ 5)  &
+                  , P7 =IntKiBuf(Int_Xferred+ 6),P8 =IntKiBuf(Int_Xferred+ 7)                               &
+                  )
+               CASE (10)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3),P5 =IntKiBuf(Int_Xferred+ 4),P6 =IntKiBuf(Int_Xferred+ 5)  &
+                  , P7 =IntKiBuf(Int_Xferred+ 6),P8 =IntKiBuf(Int_Xferred+ 7),P9 =IntKiBuf(Int_Xferred+ 8)  &
+                  , P10=IntKiBuf(Int_Xferred+ 9)                                                            &
+                  )
+               CASE (15)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3),P5 =IntKiBuf(Int_Xferred+ 4),P6 =IntKiBuf(Int_Xferred+ 5)  &
+                  , P7 =IntKiBuf(Int_Xferred+ 6),P8 =IntKiBuf(Int_Xferred+ 7),P9 =IntKiBuf(Int_Xferred+ 8)  &
+                  , P10=IntKiBuf(Int_Xferred+ 9),P11=IntKiBuf(Int_Xferred+10),P12=IntKiBuf(Int_Xferred+11)  &
+                  , P13=IntKiBuf(Int_Xferred+12),P14=IntKiBuf(Int_Xferred+13),P15=IntKiBuf(Int_Xferred+14)  &
+                  )
+               CASE (20)
+                  CALL MeshConstructElement( Mesh, i, ErrStat, ErrMess                                      &
+                  , P1 =IntKiBuf(Int_Xferred   ),P2 =IntKiBuf(Int_Xferred+ 1),P3 =IntKiBuf(Int_Xferred+ 2)  &
+                  , P4 =IntKiBuf(Int_Xferred+ 3),P5 =IntKiBuf(Int_Xferred+ 4),P6 =IntKiBuf(Int_Xferred+ 5)  &
+                  , P7 =IntKiBuf(Int_Xferred+ 6),P8 =IntKiBuf(Int_Xferred+ 7),P9 =IntKiBuf(Int_Xferred+ 8)  &
+                  , P10=IntKiBuf(Int_Xferred+ 9),P11=IntKiBuf(Int_Xferred+10),P12=IntKiBuf(Int_Xferred+11)  &
+                  , P13=IntKiBuf(Int_Xferred+12),P14=IntKiBuf(Int_Xferred+13),P15=IntKiBuf(Int_Xferred+14)  &
+                  , P16=IntKiBuf(Int_Xferred+15),P17=IntKiBuf(Int_Xferred+16),P18=IntKiBuf(Int_Xferred+17)  &
+                  , P19=IntKiBuf(Int_Xferred+18),P20=IntKiBuf(Int_Xferred+19)                               &
+                  )
+               CASE DEFAULT
+                  CALL SetErrStat(ErrID_Fatal,"No such element. Probably manged buffer.",ErrStat,ErrMess,RoutineName)
+                  RETURN
+               END SELECT  
+               Int_Xferred = Int_Xferred + nelemnodes
+            END DO   ! Elements of this kind
+         end if ! if there are any elements of this kind
 
-     ic = HDR_FIRSTELEM
-     DO i = 1, Int_Buf(HDR_NUMELEMREC)
-       Xelement = Int_Buf(ic) ; ic = ic + 1
-       nelemnodes = Int_Buf(ic) ; ic = ic + 1
-       SELECT CASE (nelemnodes )
-         CASE (1)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   )                                                                &
-            )
-         CASE (2)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2= Int_Buf(ic+1 )                                            &
-            )
-         CASE (3)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 )                        &
-            )
-         CASE (4)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            )
-         CASE (6)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            , P5 =Int_Buf(ic+4 ), P6 =Int_Buf(ic+5 )                                            &
-            )
-         CASE (8)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            , P5 =Int_Buf(ic+4 ), P6 =Int_Buf(ic+5 ), P7 =Int_Buf(ic+6 ), P8 =Int_Buf(ic+7 )    &
-            )
-         CASE (10)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            , P5 =Int_Buf(ic+4 ), P6 =Int_Buf(ic+5 ), P7 =Int_Buf(ic+6 ), P8 =Int_Buf(ic+7 )    &
-            , P9 =Int_Buf(ic+8 ), P10=Int_Buf(ic+9 )                                            &
-            )
-         CASE (15)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            , P5 =Int_Buf(ic+4 ), P6 =Int_Buf(ic+5 ), P7 =Int_Buf(ic+6 ), P8 =Int_Buf(ic+7 )    &
-            , P9 =Int_Buf(ic+8 ), P10=Int_Buf(ic+9 ), P11=Int_Buf(ic+10), P12=Int_Buf(ic+11)    &
-            , P13=Int_Buf(ic+12), P14=Int_Buf(ic+13), P15=Int_Buf(ic+14)                        &
-            )
-         CASE (20)
-           CALL MeshConstructElement( Mesh, Xelement, ErrStat, ErrMess                          &
-            , P1 =Int_Buf(ic   ), P2 =Int_Buf(ic+1 ), P3 =Int_Buf(ic+2 ), P4 =Int_Buf(ic+3 )    &
-            , P5 =Int_Buf(ic+4 ), P6 =Int_Buf(ic+5 ), P7 =Int_Buf(ic+6 ), P8 =Int_Buf(ic+7 )    &
-            , P9 =Int_Buf(ic+8 ), P10=Int_Buf(ic+9 ), P11=Int_Buf(ic+10), P12=Int_Buf(ic+11)    &
-            , P13=Int_Buf(ic+12), P14=Int_Buf(ic+13), P15=Int_Buf(ic+14), P16=Int_Buf(ic+15)    &
-            , P17=Int_Buf(ic+16), P18=Int_Buf(ic+17), P19=Int_Buf(ic+18), P20=Int_Buf(ic+19)    &
-            )
-         CASE DEFAULT
-           ! Throw a fault here. There is no such element. Probably buffer mangled.
-            ErrStat = ErrID_Fatal
-            ErrMess = 'ModMesh: MeshUnpack: No such element.  Probably manged buffer.'
-            CALL ProgAbort ( ErrMess )
-            RETURN
-      END SELECT
-      IF (ErrStat >= AbortErrLev) RETURN
-
-       ic = ic + nelemnodes ;
-
-     ENDDO
-
-     ! Unpack the Real Buffer
-     ic = 1
-     DO i = 1, Mesh%Nnodes
-       Mesh%Position(1,i) = Re_Buf(ic) ; ic = ic + 1
-       Mesh%Position(2,i) = Re_Buf(ic) ; ic = ic + 1
-       Mesh%Position(3,i) = Re_Buf(ic) ; ic = ic + 1
-     ENDDO
-
-     DO i = 1, Mesh%Nnodes
-        DO jj = 1,3
-           DO ii = 1,3
-             Mesh%RefOrientation(ii,jj,i) = Re_Buf(ic) ; ic = ic + 1
-           ENDDO
-        ENDDO
-     ENDDO
-
-     IF ( Mesh%FieldMask(MASKID_FORCE) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%Force(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%Force(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%Force(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_MOMENT) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%Moment(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%Moment(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%Moment(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_ORIENTATION) ) THEN
-       DO i = 1, Mesh%Nnodes
-         DO jj = 1,3
-           DO ii = 1,3
-             Mesh%Orientation(ii,jj,i) = Re_Buf(ic) ; ic = ic + 1
-           ENDDO
+      END DO ! kinds of elements
+      
+     ! ..... fill ReKiBuf .....
+      DO i = 1, Mesh%Nnodes ! Position
+         Mesh%Position(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+      END DO
+      DO i = 1, Mesh%Nnodes ! RefOrientation
+         DO j = 1,3
+            Mesh%RefOrientation(:,j,i) = DbKiBuf(Db_Xferred:Db_Xferred+2); Db_Xferred = Db_Xferred + 3
          ENDDO
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONDISP) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%TranslationDisp(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationDisp(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationDisp(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_ROTATIONVEL) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%RotationVel(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%RotationVel(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%RotationVel(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONVEL) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%TranslationVel(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationVel(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationVel(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_ROTATIONACC) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%RotationAcc(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%RotationAcc(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%RotationAcc(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%FieldMask(MASKID_TRANSLATIONACC) ) THEN
-       DO i = 1, Mesh%Nnodes
-         Mesh%TranslationAcc(1,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationAcc(2,i) = Re_Buf(ic) ; ic = ic + 1
-         Mesh%TranslationAcc(3,i) = Re_Buf(ic) ; ic = ic + 1
-       ENDDO
-     ENDIF
-     IF ( Mesh%nScalars .GT. 0 ) THEN
-       DO i = 1, Mesh%Nnodes
-         DO ii = 1,Mesh%nScalars
-           Mesh%Scalars(ii,i) = Re_Buf(ic) ; ic = ic + 1
+      END DO
+                
+      IF ( FieldMask(MASKID_FORCE) ) THEN ! Force
+         DO i = 1, Mesh%Nnodes
+            Mesh%Force(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
          ENDDO
-       ENDDO
-     ENDIF
-
-     CALL MeshCommit(Mesh, ErrStat, ErrMess)
-
-     RETURN
-
-
+      ENDIF
+      IF ( FieldMask(MASKID_MOMENT) ) THEN ! Moment
+         DO i = 1, Mesh%Nnodes
+            Mesh%Moment(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+      IF ( FieldMask(MASKID_ORIENTATION) ) THEN ! Orientation
+         DO i = 1, Mesh%Nnodes 
+            DO j = 1,3
+               Mesh%Orientation(:,j,i) = DbKiBuf(Db_Xferred:Db_Xferred+2); Db_Xferred = Db_Xferred + 3
+            ENDDO
+         END DO
+      ENDIF
+      IF ( FieldMask(MASKID_TRANSLATIONDISP) ) THEN ! TranslationDisp
+         DO i = 1, Mesh%Nnodes
+            Mesh%TranslationDisp(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+      IF ( FieldMask(MASKID_ROTATIONVEL) ) THEN ! RotationVel
+         DO i = 1, Mesh%Nnodes
+            Mesh%RotationVel(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+      IF ( FieldMask(MASKID_TRANSLATIONVEL) ) THEN ! TranslationVel
+         DO i = 1, Mesh%Nnodes
+            Mesh%TranslationVel(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+      IF ( FieldMask(MASKID_ROTATIONACC) ) THEN ! RotationAcc
+         DO i = 1, Mesh%Nnodes
+            Mesh%RotationAcc(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+      IF ( FieldMask(MASKID_TRANSLATIONACC) ) THEN ! TranslationAcc
+         DO i = 1, Mesh%Nnodes
+            Mesh%TranslationAcc(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+2); Re_Xferred = Re_Xferred + 3
+         ENDDO
+      ENDIF
+         
+      IF ( Mesh%nScalars .GT. 0 ) THEN ! n_re = n_re + Mesh%Nnodes * Mesh%nScalar
+         DO i = 1, Mesh%Nnodes
+            Mesh%Scalars(:,i) = ReKiBuf(Re_Xferred:Re_Xferred+Mesh%nScalars-1); Re_Xferred = Re_Xferred + Mesh%nScalars
+         ENDDO
+      ENDIF         
+                     
+      ! commit the mesh
+      IF (committed) THEN
+         CALL MeshCommit(Mesh, ErrStat2, ErrMess2)
+         CALL SetErrStat(ErrStat2, ErrMess2, ErrStat, ErrMess, RoutineName)
+      END IF
+      
+      RETURN
 
    END SUBROUTINE MeshUnpack
 
+!> Given an existing mesh and a destination mesh, create a completely new copy, a sibling, or 
+!!   update the fields of a second existing mesh from the first mesh. When CtrlCode is 
+!!   MESH_NEWCOPY or MESH_SIBLING, the destination mesh must be a blank, uncreated mesh.
+!! 
+!! If CtrlCode is MESH_NEWCOPY, an entirely new copy of the mesh is created, including all fields, 
+!!   with the same data values as the original, but as an entirely separate copy in memory. The new 
+!!   copy is in the same state as the original--if the original has not been committed, neither is 
+!!   the copy; in this case, an all-new copy of the mesh must be committed separately.
+!!
+!! If CtrlCode is MESH_SIBLING, the destination mesh is created with the same mesh and position/reference 
+!!   orientation information of the source mesh, and this new sibling is added to the end of the list for 
+!!   the set of siblings. Siblings may have different fields (other than Position and RefOrientation). 
+!!   Therefore, for a sibling, it is necessary, as with MeshCreate, to indicate the fields the sibling 
+!!   will have using optional arguments. Sibling meshes should not be created unless the original mesh 
+!!   has been committed first.
+!!
+!! If CtrlCode is MESH_UPDATECOPY, all of the allocatable fields of the destination mesh are updated 
+!!   with the values of the fields in the source. (The underlying mesh is untouched.) The mesh and field 
+!!   definitions of the source and destination meshes must match and both must have been already committed. 
+!!   The destination mesh may be an entirely different copy or it may be a sibling of the source mesh.
    SUBROUTINE MeshCopy( SrcMesh, DestMesh, CtrlCode, ErrStat , ErrMess   &
                       ,IOS, Force, Moment, Orientation, TranslationDisp, TranslationVel &
                       ,RotationVel, TranslationAcc, RotationAcc, nScalars )
    
-   ! Given an existing mesh and a destination mesh, create a completely new copy, a sibling, or 
-   !   update the fields of a second existing mesh from the first mesh. When CtrlCode is 
-   !   MESH_NEWCOPY or MESH_SIBLING, the destination mesh must be a blank, uncreated mesh.
-   ! 
-   ! If CtrlCode is MESH_NEWCOPY, an entirely new copy of the mesh is created, including all fields, 
-   !   with the same data values as the original, but as an entirely separate copy in memory. The new 
-   !   copy is in the same state as the original--if the original has not been committed, neither is 
-   !   the copy; in this case, an all-new copy of the mesh must be committed separately.
-   !
-   ! If CtrlCode is MESH_SIBLING, the destination mesh is created with the same mesh and position/reference 
-   !   orientation information of the source mesh, and this new sibling is added to the end of the list for 
-   !   the set of siblings. Siblings may have different fields (other than Position and RefOrientation). 
-   !   Therefore, for a sibling, it is necessary, as with MeshCreate, to indicate the fields the sibling 
-   !   will have using optional arguments. Sibling meshes should not be created unless the original mesh 
-   !   has been committed first.
-   !
-   ! If CtrlCode is MESH_UPDATECOPY, all of the allocatable fields of the destination mesh are updated 
-   !   with the values of the fields in the source. (The underlying mesh is untouched.) The mesh and field 
-   !   definitions of the source and destination meshes must match and both must have been already committed. 
-   !   The destination mesh may be an entirely different copy or it may be a sibling of the source mesh.
+
    
-   
-     TYPE(MeshType), TARGET,      INTENT(INOUT) :: SrcMesh  ! Mesh being copied
-     TYPE(MeshType), TARGET,      INTENT(INOUT) :: DestMesh ! Copy of mesh
-     INTEGER(IntKi),              INTENT(IN)    :: CtrlCode ! MESH_NEWCOPY, MESH_SIBLING, or
-                                                            ! MESH_UPDATECOPY
-     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat  ! Error code
-     CHARACTER(*),                INTENT(OUT)   :: ErrMess  ! Error message
+     TYPE(MeshType), TARGET,      INTENT(INOUT) :: SrcMesh           !< Mesh being copied
+     TYPE(MeshType), TARGET,      INTENT(INOUT) :: DestMesh          !< Copy of mesh
+     INTEGER(IntKi),              INTENT(IN)    :: CtrlCode          !< MESH_NEWCOPY, MESH_SIBLING, or
+                                                                     !! MESH_UPDATECOPY
+     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat           !< Error code
+     CHARACTER(*),                INTENT(OUT)   :: ErrMess           !< Error message
     ! Optional arguments (used only if CtrlCode is MESH_SIBLING):
-     INTEGER(IntKi), OPTIONAL,    INTENT(IN)    :: IOS               ! If present, IOS of new sibling: input (COMPONENT_INPUT), output(COMPONENT_OUTPUT), or state(COMPONENT_STATE)
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Force             ! If present and true, allocate Force field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Moment            ! If present and true, allocate Moment field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Orientation       ! If present and true, allocate Orientation field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationDisp   ! If present and true, allocate TranslationDisp field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationVel    ! If present and true, allocate TranslationVel field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: RotationVel       ! If present and true, allocate RotationVel field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationAcc    ! If present and true, allocate TranslationAcc field
-     LOGICAL,        OPTIONAL,    INTENT(IN)    :: RotationAcc       ! If present and true, allocate RotationAcc field
-     INTEGER(IntKi), OPTIONAL,    INTENT(IN)    :: nScalars          ! If present and > 0 , alloc n Scalars               
+     INTEGER(IntKi), OPTIONAL,    INTENT(IN)    :: IOS               !< If present, IOS of new sibling: input (COMPONENT_INPUT), output(COMPONENT_OUTPUT), or state(COMPONENT_STATE)
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Force             !< If present and true, allocate Force field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Moment            !< If present and true, allocate Moment field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: Orientation       !< If present and true, allocate Orientation field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationDisp   !< If present and true, allocate TranslationDisp field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationVel    !< If present and true, allocate TranslationVel field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: RotationVel       !< If present and true, allocate RotationVel field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: TranslationAcc    !< If present and true, allocate TranslationAcc field
+     LOGICAL,        OPTIONAL,    INTENT(IN)    :: RotationAcc       !< If present and true, allocate RotationAcc field
+     INTEGER(IntKi), OPTIONAL,    INTENT(IN)    :: nScalars          !< If present and > 0 , alloc n Scalars               
     ! Local
      INTEGER(IntKi)                             :: IOS_l               ! IOS of new sibling
      LOGICAL                                    :: Force_l           & ! If true, allocate Force field
@@ -1295,19 +1573,44 @@ CONTAINS
 
       IF (.NOT. SrcMesh%Initialized) RETURN !bjj: maybe we should first CALL MeshDestroy(DestMesh,ErrStat, ErrMess)
 
-      IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_SIBLING ) THEN
-
-         IF ( CtrlCode .EQ. MESH_NEWCOPY ) THEN
-            CALL MeshCreate( DestMesh, IOS=SrcMesh%IOS, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess &
-                            ,Force=SrcMesh%FieldMask(MASKID_FORCE)                                              &
-                            ,Moment=SrcMesh%FieldMask(MASKID_MOMENT)                                            &
-                            ,Orientation=SrcMesh%FieldMask(MASKID_ORIENTATION)                                  &
-                            ,TranslationDisp=SrcMesh%FieldMask(MASKID_TRANSLATIONDISP)                          &
-                            ,TranslationVel=SrcMesh%FieldMask(MASKID_TRANSLATIONVEL)                            &
-                            ,RotationVel=SrcMesh%FieldMask(MASKID_ROTATIONVEL)                                  &
-                            ,TranslationAcc=SrcMesh%FieldMask(MASKID_TRANSLATIONACC)                            &
-                            ,RotationAcc=SrcMesh%FieldMask(MASKID_ROTATIONACC)                                  &
-                            ,nScalars=SrcMesh%nScalars                                                          )
+      IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_SIBLING .OR. CtrlCode .EQ. MESH_COUSIN ) THEN
+         
+         IF (CtrlCode .EQ. MESH_NEWCOPY) THEN
+            IOS_l              = SrcMesh%IOS 
+            Force_l            = SrcMesh%FieldMask(MASKID_FORCE)                     
+            Moment_l           = SrcMesh%FieldMask(MASKID_MOMENT)                   
+            Orientation_l      = SrcMesh%FieldMask(MASKID_ORIENTATION)         
+            TranslationDisp_l  = SrcMesh%FieldMask(MASKID_TRANSLATIONDISP) 
+            TranslationVel_l   = SrcMesh%FieldMask(MASKID_TRANSLATIONVEL)   
+            RotationVel_l      = SrcMesh%FieldMask(MASKID_ROTATIONVEL)         
+            TranslationAcc_l   = SrcMesh%FieldMask(MASKID_TRANSLATIONACC)   
+            RotationAcc_l      = SrcMesh%FieldMask(MASKID_ROTATIONACC)         
+            nScalars_l         = SrcMesh%nScalars          
+         ELSE ! Sibling or cousin
+            IOS_l          = SrcMesh%IOS ; IF ( PRESENT(IOS) )                         IOS_l = IOS
+            Force_l            = .FALSE. ; IF ( PRESENT(Force) )                     Force_l = Force
+            Moment_l           = .FALSE. ; IF ( PRESENT(Moment) )                   Moment_l = Moment
+            Orientation_l      = .FALSE. ; IF ( PRESENT(Orientation) )         Orientation_l = Orientation
+            TranslationDisp_l  = .FALSE. ; IF ( PRESENT(TranslationDisp) ) TranslationDisp_l = TranslationDisp
+            TranslationVel_l   = .FALSE. ; IF ( PRESENT(TranslationVel) )   TranslationVel_l = TranslationVel
+            RotationVel_l      = .FALSE. ; IF ( PRESENT(RotationVel) )         RotationVel_l = RotationVel
+            TranslationAcc_l   = .FALSE. ; IF ( PRESENT(TranslationAcc) )   TranslationAcc_l = TranslationAcc
+            RotationAcc_l      = .FALSE. ; IF ( PRESENT(RotationAcc) )         RotationAcc_l = RotationAcc
+            nScalars_l         = 0       ; IF ( PRESENT(nScalars) )               nScalars_l = nScalars
+         END IF
+            
+         IF ( CtrlCode .EQ. MESH_NEWCOPY .OR. CtrlCode .EQ. MESH_COUSIN ) THEN
+                                    
+            CALL MeshCreate( DestMesh, IOS=IOS_l, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess &
+                            ,Force=Force_l                                                                &
+                            ,Moment=Moment_l                                                              &
+                            ,Orientation=Orientation_l                                                    &
+                            ,TranslationDisp=TranslationDisp_l                                            &
+                            ,TranslationVel=TranslationVel_l                                              &
+                            ,RotationVel=RotationVel_l                                                    &
+                            ,TranslationAcc=TranslationAcc_l                                              &
+                            ,RotationAcc=RotationAcc_l                                                    &
+                            ,nScalars=nScalars_l                                                          )
 
             IF (ErrStat >= AbortErrLev) RETURN
 
@@ -1387,16 +1690,6 @@ CONTAINS
                RETURN !early return
             END IF
 
-            IOS_l          = SrcMesh%IOS ; IF ( PRESENT(IOS) )                         IOS_l = IOS
-            Force_l            = .FALSE. ; IF ( PRESENT(Force) )                     Force_l = Force
-            Moment_l           = .FALSE. ; IF ( PRESENT(Moment) )                   Moment_l = Moment
-            Orientation_l      = .FALSE. ; IF ( PRESENT(Orientation) )         Orientation_l = Orientation
-            TranslationDisp_l  = .FALSE. ; IF ( PRESENT(TranslationDisp) ) TranslationDisp_l = TranslationDisp
-            TranslationVel_l   = .FALSE. ; IF ( PRESENT(TranslationVel) )   TranslationVel_l = TranslationVel
-            RotationVel_l      = .FALSE. ; IF ( PRESENT(RotationVel) )         RotationVel_l = RotationVel
-            TranslationAcc_l   = .FALSE. ; IF ( PRESENT(TranslationAcc) )   TranslationAcc_l = TranslationAcc
-            RotationAcc_l      = .FALSE. ; IF ( PRESENT(RotationAcc) )         RotationAcc_l = RotationAcc
-            nScalars_l         = 0       ; IF ( PRESENT(nScalars) )               nScalars_l = nScalars
             CALL MeshCreate( DestMesh, IOS=IOS_l, Nnodes=SrcMesh%Nnodes, ErrStat=ErrStat, ErrMess=ErrMess   &
                             ,Force=Force_l                                                                  &
                             ,Moment=Moment_l                                                                &
@@ -1480,20 +1773,18 @@ CONTAINS
 
    END SUBROUTINE MeshCopy
 
-! added 20130102 as stub for AeroDyn work
+!> For a given node in a mesh, assign the coordinates of the node in the global coordinate space. 
+!! If an Orient argument is included, the node will also be assigned the specified orientation 
+!! (orientation is assumed to be the identity matrix if omitted). Returns a non-zero value in  
+!! ErrStat if Inode is outside the range 1..Nnodes.     
    SUBROUTINE MeshPositionNode( Mesh, Inode, Pos, ErrStat, ErrMess, Orient )
-
-   ! For a given node in a mesh, assign the coordinates of the node in the global coordinate space. 
-   ! If an Orient argument is included, the node will also be assigned the specified orientation 
-   ! (orientation is assumed to be the identity matrix if omitted). Returns a non-zero value in  
-   ! ErrStat if Inode is outside the range 1..Nnodes.     
    
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh         ! Mesh being spatio-located
-     INTEGER(IntKi),              INTENT(IN   ) :: Inode        ! Number of node being located
-     REAL(ReKi),                  INTENT(IN   ) :: Pos(3)       ! Xi,Yi,Zi, coordinates of node
-     INTEGER(IntKi),              INTENT(  OUT) :: ErrStat      ! Error code
-     CHARACTER(*),                INTENT(  OUT) :: ErrMess      ! Error message
-     REAL(ReKi), OPTIONAL,        INTENT(IN   ) :: Orient(3,3)  ! Orientation (direction cosine matrix) of node; identity by default
+     TYPE(MeshType),              INTENT(INOUT) :: Mesh         !< Mesh being spatio-located
+     INTEGER(IntKi),              INTENT(IN   ) :: Inode        !< Number of node being located
+     REAL(ReKi),                  INTENT(IN   ) :: Pos(3)       !< Xi,Yi,Zi, coordinates of node
+     INTEGER(IntKi),              INTENT(  OUT) :: ErrStat      !< Error code
+     CHARACTER(*),                INTENT(  OUT) :: ErrMess      !< Error message
+     REAL(R8Ki), OPTIONAL,        INTENT(IN   ) :: Orient(3,3)  !< Orientation (direction cosine matrix) of node; identity by default
      
      ErrStat = ErrID_None
      ErrMess = ""
@@ -1542,26 +1833,25 @@ CONTAINS
      IF ( PRESENT(Orient) ) THEN
         Mesh%RefOrientation(:,:,Inode) = Orient
      ELSE
-        Mesh%RefOrientation(:,1,Inode) = (/ 1., 0., 0. /)
-        Mesh%RefOrientation(:,2,Inode) = (/ 0., 1., 0. /)
-        Mesh%RefOrientation(:,3,Inode) = (/ 0., 0., 1. /)
+        Mesh%RefOrientation(:,1,Inode) = (/ 1._R8Ki, 0._R8Ki, 0._R8Ki /)
+        Mesh%RefOrientation(:,2,Inode) = (/ 0._R8Ki, 1._R8Ki, 0._R8Ki /)
+        Mesh%RefOrientation(:,3,Inode) = (/ 0._R8Ki, 0._R8Ki, 1._R8Ki /)
      END IF
 
      RETURN
 
    END SUBROUTINE MeshPositionNode
 
+!> Given a mesh that has been created, spatio-located, and constructed, 
+!! commit the definition of the mesh, making it ready for initialization 
+!! and use. Explicitly committing a mesh provides the opportunity to precompute 
+!! traversal information, neighbor lists and other information about the mesh. 
+!! Returns non-zero in value of ErrStat on error.     
    SUBROUTINE MeshCommit( Mesh, ErrStat, ErrMess )
-     
-    ! Given a mesh that has been created, spatio-located, and constructed, 
-    ! commit the definition of the mesh, making it ready for initialization 
-    ! and use. Explicitly committing a mesh provides the opportunity to precompute 
-    ! traversal information, neighbor lists and other information about the mesh. 
-    ! Returns non-zero in value of ErrStat on error.     
-    
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh ! Mesh being committed
-     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat ! Error code
-     CHARACTER(*),                INTENT(OUT)   :: ErrMess ! Error message
+         
+     TYPE(MeshType),              INTENT(INOUT) :: Mesh              !< Mesh being committed
+     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat           !< Error code
+     CHARACTER(*),                INTENT(OUT)   :: ErrMess           !< Error message
     ! Local
      REAL(ReKi)                                 :: n1_n2_vector(3)               ! vector going from node 1 to node 2 in a Line2 element
      INTEGER n0d, n1d, n2d, n3d, nn, i, j, NElem, n1,n2
@@ -1569,6 +1859,12 @@ CONTAINS
 
      !TYPE(ElemListType), POINTER :: tmp(:)
 
+     IF (Mesh%Committed) then
+       ErrStat = ErrID_Warn
+       ErrMess = "MeshCommit: mesh was already committed."
+       RETURN  ! Early return
+     ENDIF
+     
      ! Check for spatial constraints -- can't mix 1D with 2D with 3D
      n0d = Mesh%ElemTable(ELEMENT_POINT)%nelem
      n1d = Mesh%ElemTable(ELEMENT_LINE2)%nelem+Mesh%ElemTable(ELEMENT_LINE3)%nelem
@@ -1693,18 +1989,16 @@ CONTAINS
 
    END SUBROUTINE MeshCommit
 
-! added 20130102 as stub for AeroDyn work
+!> Given a mesh and an element name, construct a point element whose vertex is the 
+!! node index listed as the remaining argument of the call to MeshConstructElement.
+!! Returns a non-zero ErrStat value on error.     
    SUBROUTINE MeshConstructElement_1PT( Mesh, Xelement, ErrStat, ErrMess, P1 )
-     
-   ! Given a mesh and an element name, construct an point element whose vertex is the 
-   ! node index listed as the remaining argument of the call to MeshConstructElement.
-   ! Returns a non-zero value on error.     
-     
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being constructed
-     INTEGER(IntKi),              INTENT(IN)    :: Xelement  ! See Element Names
-     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   ! Error code
-     CHARACTER(*),                INTENT(OUT)   :: ErrMess   ! Error message
-     INTEGER,                     INTENT(IN   ) :: P1
+          
+     TYPE(MeshType),              INTENT(INOUT) :: Mesh      !< Mesh being constructed
+     INTEGER(IntKi),              INTENT(IN)    :: Xelement  !< See Element Names
+     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   !< Error code
+     CHARACTER(*),                INTENT(OUT)   :: ErrMess   !< Error message
+     INTEGER,                     INTENT(IN   ) :: P1        !< node index for this point element
 
      IF ( mesh_debug ) print*,'Called MeshConstructElement_1PT'
      ErrStat = ErrID_None
@@ -1812,18 +2106,18 @@ CONTAINS
      
    END SUBROUTINE BumpupElementTable_New
    
+!> This subroutine increases the allocated space for Mesh%ElemTable(Xelement)%Elements
+!! if adding a new element will exceed the pre-allocated space.
    SUBROUTINE BumpupElementTable( Mesh, Xelement, ErrStat, ErrMess )
-   ! This subroutine increases the allocated space for Mesh%ElemTable(Xelement)%Elements
-   ! if adding a new element will exceed the pre-allocated space.
 
    ! bjj: this is the old method of increasing the element table size.
    ! it was duplicated in MeshConstructElement_1PT and MeshConstructElement_2PT
    ! I have made it a subroutine so we don't have to duplicate it anymore.
    
-      TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being constructed
-      INTEGER(IntKi),              INTENT(IN)    :: Xelement  ! See Element Names
-      INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   ! Error code
-      CHARACTER(*),                INTENT(OUT)   :: ErrMess   ! Error message
+      TYPE(MeshType),              INTENT(INOUT) :: Mesh      !< Mesh being constructed
+      INTEGER(IntKi),              INTENT(IN)    :: Xelement  !< type of element (See Element Names)
+      INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   !< Error code
+      CHARACTER(*),                INTENT(OUT)   :: ErrMess   !< Error message
    
     ! Local
      TYPE(ElemRecType),             POINTER      :: tmp(:)
@@ -1855,20 +2149,19 @@ CONTAINS
        
        
    END SUBROUTINE BumpupElementTable
-   
-   
-   SUBROUTINE MeshConstructElement_2PT( Mesh, Xelement, ErrStat, ErrMess, P1, P2 )
-     
-      ! Given a mesh and an element name, construct 2-point line (line2) element whose 
-      ! vertices are the node indices listed as the remaining arguments of the call to 
-      ! MeshConstructElement. The adjacency of elements is implied when elements are 
-      ! created that share some of the same nodes. Returns a non-zero value on error.     
       
-     TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being constructed
-     INTEGER(IntKi),              INTENT(IN)    :: Xelement  ! See Element Names
-     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   ! Error code
-     CHARACTER(*),                INTENT(OUT)   :: ErrMess   ! Error message
-     INTEGER,                     INTENT(IN   ) :: P1,  P2
+!> Given a mesh and an element name, construct 2-point line (line2) element whose 
+!! vertices are the node indices listed as the remaining arguments of the call to 
+!! MeshConstructElement. The adjacency of elements is implied when elements are 
+!! created that share some of the same nodes. Returns a non-zero value on error.     
+   SUBROUTINE MeshConstructElement_2PT( Mesh, Xelement, ErrStat, ErrMess, P1, P2 )
+      
+     TYPE(MeshType),              INTENT(INOUT) :: Mesh      !< Mesh being constructed
+     INTEGER(IntKi),              INTENT(IN)    :: Xelement  !< See Element Names
+     INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   !< Error code
+     CHARACTER(*),                INTENT(OUT)   :: ErrMess   !< Error message
+     INTEGER,                     INTENT(IN   ) :: P1        !< 1 of 2 points that make a 2-point line element
+     INTEGER,                     INTENT(IN   ) :: P2        !< 1 of 2 points that make a 2-point line element
      
      IF ( mesh_debug ) print*,'Called MeshConstructElement_2PT'
      ErrStat = ErrID_None
@@ -2028,16 +2321,16 @@ CONTAINS
    END SUBROUTINE MeshConstructElement_20PT
 
 !................................................................                                                                                                                                                      
+!> This routine splits a line2 element into two separate elements, using p1 as
+!! the new node connecting the two new elements formed from E1.
    SUBROUTINE MeshSplitElement_2PT( Mesh, Xelement, ErrStat, ErrMess, E1, P1  )
-      ! routine splits a line2 element into two separate elements, using p1 as
-      ! the new node connecting the two new elements formed from E1
       
-      TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being constructed
-      INTEGER(IntKi),              INTENT(IN)    :: Xelement  ! See Element Names
-      INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   ! Error code
-      CHARACTER(*),                INTENT(OUT)   :: ErrMess   ! Error message
-      INTEGER,                     INTENT(IN   ) :: E1        ! number of element in Element Table
-      INTEGER,                     INTENT(IN   ) :: P1        ! node number
+      TYPE(MeshType),              INTENT(INOUT) :: Mesh      !< Mesh being constructed
+      INTEGER(IntKi),              INTENT(IN)    :: Xelement  !< See Element Names
+      INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   !< Error code
+      CHARACTER(*),                INTENT(OUT)   :: ErrMess   !< Error message
+      INTEGER,                     INTENT(IN   ) :: E1        !< number of element in Element Table
+      INTEGER,                     INTENT(IN   ) :: P1        !< node number
 
       INTEGER                                    :: p2        ! local copy of P2, in case we end up deallocating the array pointed to in the call to construct a new element
       
@@ -2087,15 +2380,14 @@ CONTAINS
    END SUBROUTINE MeshSplitElement_2PT
 !................................................................                                                                           
                                                                            
+!> Given a control code and a mesh that has been committed, retrieve the next element in the mesh. 
+!!   Used to traverse mesh element by element. On entry, the CtrlCode argument contains a control code: 
+!!   zero indicates start from the beginning, an integer between 1 and Mesh%Nelemlist returns that element,
+!!   and MESH_NEXT means return the next element in traversal. On exit, CtrlCode contains the status of the 
+!!   traversal in (zero or MESH_NOMOREELEMS). The routine optionally outputs the index of the element in the
+!!   mesh's element list, the name of the element (see "Element Names"), and a pointer to the element.    
    SUBROUTINE MeshNextElement ( Mesh, CtrlCode, ErrStat, ErrMess, Ielement, Xelement, ElemRec )
-   
-      ! Given a control code and a mesh that has been committed, retrieve the next element in the mesh. 
-      !   Used to traverse mesh element by element. On entry, the CtrlCode argument contains a control code: 
-      !   zero indicates start from the beginning, an integer between 1 and Mesh%Nelemlist returns that element,
-      !   and MESH_NEXT means return the next element in traversal. On exit, CtrlCode contains the status of the 
-      !   traversal in (zero or MESH_NOMOREELEMS). The routine optionally outputs the index of the element in the
-      !   mesh's element list, the name of the element (see "Element Names"), and a pointer to the element.    
-   
+      
      TYPE(MeshType),              INTENT(INOUT) :: Mesh      ! Mesh being constructed
      INTEGER(IntKi),              INTENT(INOUT) :: CtrlCode  ! CtrlCode
      INTEGER(IntKi),              INTENT(OUT)   :: ErrStat   ! Error code
@@ -2138,19 +2430,18 @@ CONTAINS
    END SUBROUTINE MeshNextElement
 
 
-   !...............................................................................................................................
+!...............................................................................................................................
+!> This subroutine calculates a extrapolated (or interpolated) input u_out at time t_out, from previous/future time
+!! values of u (which has values associated with times in t).  Order of the interpolation is 1.
     SUBROUTINE MeshExtrapInterp1(u1, u2, tin, u_out, tin_out, ErrStat, ErrMsg )
-   
-   ! This subroutine calculates a extrapolated (or interpolated) input u_out at time t_out, from previous/future time
-   ! values of u (which has values associated with times in t).  Order of the interpolation is 1.
-   
-    TYPE(MeshType),      INTENT(IN)     :: u1                        ! Inputs at t1 > t2
-    TYPE(MeshType),      INTENT(IN)     :: u2                        ! Inputs at t2
-    REAL(DbKi),          INTENT(IN   )  :: tin(:)                    ! Times associated with the inputs
-    TYPE(MeshType),      INTENT(INOUT)  :: u_out                     ! Inputs at tin_out
-    REAL(DbKi),          INTENT(IN   )  :: tin_out                   ! time to be extrap/interp'd to
-    INTEGER(IntKi),      INTENT(  OUT)  :: ErrStat                   ! Error status of the operation
-    CHARACTER(*),        INTENT(  OUT)  :: ErrMsg                    ! Error message if ErrStat /= ErrID_None
+      
+    TYPE(MeshType),      INTENT(IN)     :: u1                        !< Inputs at t1 > t2
+    TYPE(MeshType),      INTENT(IN)     :: u2                        !< Inputs at t2
+    REAL(DbKi),          INTENT(IN   )  :: tin(:)                    !< Times associated with the inputs
+    TYPE(MeshType),      INTENT(INOUT)  :: u_out                     !< Inputs at tin_out
+    REAL(DbKi),          INTENT(IN   )  :: tin_out                   !< time to be extrap/interp'd to
+    INTEGER(IntKi),      INTENT(  OUT)  :: ErrStat                   !< Error status of the operation
+    CHARACTER(*),        INTENT(  OUT)  :: ErrMsg                    !< Error message if ErrStat /= ErrID_None
                                                                      
       ! local variables                                              
     INTEGER(IntKi), parameter           :: order = 1                 ! order of polynomial fit (max 2)
@@ -2158,8 +2449,9 @@ CONTAINS
     REAL(DbKi)                          :: t_out                     ! Time to which to be extrap/interpd
                                                                      
     REAL(DbKi)                          :: scaleFactor               ! temporary for extrapolation/interpolation
-    REAL(ReKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
-    REAL(ReKi)                          :: tensor_interp(3)          ! for extrapolation of orientations    
+    REAL(DbKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor_interp(3)          ! for extrapolation of orientations    
+    REAL(DbKi)                          :: Orient(3,3)               ! for extrapolation of orientations    
     
     INTEGER(IntKi)                      :: node                      ! node counter
 
@@ -2223,45 +2515,55 @@ CONTAINS
 
       IF ( ALLOCATED(u1%Orientation) ) THEN
                   
-         DO node=1,u_out%Nnodes
+         if ( EqualRealNos(t_out, t(1)) ) then
+            u_out%Orientation = u1%Orientation
+         elseif ( EqualRealNos(t_out, t(2)) ) then
+            u_out%Orientation = u2%Orientation
+         else
+                                 
+            DO node=1,u_out%Nnodes
             
-            CALL DCM_logmap ( u1%Orientation(:,:,node), tensor(:,1), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u2%Orientation(:,:,node), tensor(:,2), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
+               Orient = u1%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,1), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u2%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,2), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp1:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
                                     
-            CALL DCM_SetLogMapForInterp( tensor )            
+               CALL DCM_SetLogMapForInterp( tensor )            
                       
-            tensor_interp  = tensor(:,1) + (tensor(:,2) - tensor(:,1)) * scaleFactor            
+               tensor_interp  = tensor(:,1) + (tensor(:,2) - tensor(:,1)) * scaleFactor            
                                                 
-            u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )                              
-         END DO                     
-         
+               u_out%Orientation(:,:,node) = DCM_exp( tensor_interp ) 
+               
+            END DO
+            
+         end if
+                  
       END IF
 
    END SUBROUTINE MeshExtrapInterp1
 
-   !...............................................................................................................................
+!...............................................................................................................................
+!> This subroutine calculates a extrapolated (or interpolated) input u_out at time t_out, from previous/future time
+!! values of u (which has values associated with times in t).  Order of the interpolation is 2.
     SUBROUTINE MeshExtrapInterp2(u1, u2, u3, tin, u_out, tin_out, ErrStat, ErrMsg )
    
-   ! This subroutine calculates a extrapolated (or interpolated) input u_out at time t_out, from previous/future time
-   ! values of u (which has values associated with times in t).  Order of the interpolation is 2.
-      
-
-    TYPE(MeshType),      INTENT(IN)     :: u1                        ! Inputs at t1 > t2 > t3
-    TYPE(MeshType),      INTENT(IN)     :: u2                        ! Inputs at t2 > t3
-    TYPE(MeshType),      INTENT(IN)     :: u3                        ! Inputs at t3
-    REAL(DbKi),          INTENT(IN   )  :: tin(:)                    ! Times associated with the inputs
-    TYPE(MeshType),      INTENT(INOUT)  :: u_out                     ! Inputs at tin_out
-    REAL(DbKi),          INTENT(IN   )  :: tin_out                   ! time to be extrap/interp'd to
-    INTEGER(IntKi),      INTENT(  OUT)  :: ErrStat                   ! Error status of the operation
-    CHARACTER(*),        INTENT(  OUT)  :: ErrMsg                    ! Error message if ErrStat /= ErrID_None
+    TYPE(MeshType),      INTENT(IN)     :: u1                        !< Inputs at t1 > t2 > t3
+    TYPE(MeshType),      INTENT(IN)     :: u2                        !< Inputs at t2 > t3
+    TYPE(MeshType),      INTENT(IN)     :: u3                        !< Inputs at t3
+    REAL(DbKi),          INTENT(IN   )  :: tin(:)                    !< Times associated with the inputs
+    TYPE(MeshType),      INTENT(INOUT)  :: u_out                     !< Inputs at tin_out
+    REAL(DbKi),          INTENT(IN   )  :: tin_out                   !< time to be extrap/interp'd to
+    INTEGER(IntKi),      INTENT(  OUT)  :: ErrStat                   !< Error status of the operation
+    CHARACTER(*),        INTENT(  OUT)  :: ErrMsg                    !< Error message if ErrStat /= ErrID_None
                                                                      
       ! local variables                                              
     INTEGER(IntKi), parameter           :: order = 2                 ! order of polynomial fit (max 2)
@@ -2269,8 +2571,9 @@ CONTAINS
     REAL(DbKi)                          :: t(SIZE(tin))              ! Times associated with the inputs
     REAL(DbKi)                          :: t_out                     ! Time to which to be extrap/interpd                                                                     
     REAL(DbKi)                          :: scaleFactor               ! temporary for extrapolation/interpolation    
-    REAL(ReKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
-    REAL(ReKi)                          :: tensor_interp(3)          ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor(3, order+1)        ! for extrapolation of orientations 
+    REAL(DbKi)                          :: tensor_interp(3)          ! for extrapolation of orientations 
+    REAL(DbKi)                          :: Orient(3,3)               ! for extrapolation of orientations    
     
     INTEGER(IntKi)                      :: node                      ! node counter
     
@@ -2372,38 +2675,46 @@ CONTAINS
 
       IF ( ALLOCATED(u1%Orientation) ) THEN
                      
-         DO node=1,u_out%Nnodes
-            CALL DCM_logmap ( u1%Orientation(:,:,node), tensor(:,1), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u2%Orientation(:,:,node), tensor(:,2), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-            CALL DCM_logmap ( u3%Orientation(:,:,node), tensor(:,3), ErrStat, ErrMsg )
-               IF (ErrStat >= AbortErrLev ) THEN 
-                  ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
-                  RETURN
-               END IF
-! call WrReAryFileNR ( DEBUG_UNIT, (/ REAL(tin,ReKi), REAL(tin_out,ReKi) /), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,1), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,2), 'F15.5,1x', ErrStat, ErrMsg  )
-! call WrReAryFileNR ( DEBUG_UNIT, tensor(:,3), 'F15.5,1x', ErrStat, ErrMsg  )
-            
-!            CALL SetAnglesForInterp( tensor )
-            CALL DCM_SetLogMapForInterp( tensor )
+         if ( EqualRealNos(t_out, t(1)) ) then
+            u_out%Orientation = u1%Orientation
+         elseif ( EqualRealNos(t_out, t(2)) ) then
+            u_out%Orientation = u2%Orientation
+         elseif ( EqualRealNos(t_out, t(3)) ) then
+            u_out%Orientation = u3%Orientation
+         else                  
+            DO node=1,u_out%Nnodes
+               
+               Orient = u1%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,1), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u2%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,2), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+                  
+               Orient = u3%Orientation(:,:,node)
+               CALL DCM_logmap ( Orient, tensor(:,3), ErrStat, ErrMsg )
+                  IF (ErrStat >= AbortErrLev ) THEN 
+                     ErrMsg = 'MeshExtrapInterp2:'//TRIM(ErrMsg)
+                     RETURN
+                  END IF
+               
+               CALL DCM_SetLogMapForInterp( tensor )
                                               
-            tensor_interp =   tensor(:,1) &
-                              + ( t(3)**2 * (tensor(:,1) - tensor(:,2)) + t(2)**2*(-tensor(:,1) + tensor(:,3)) )*scaleFactor &
-                              + ( (t(2)-t(3))*tensor(:,1) + t(3)*tensor(:,2) - t(2)*tensor(:,3) )*scaleFactor * t_out
-            u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )  
-! write(DEBUG_UNIT,'(50(F15.5,1x))') tensor_interp ,  tensor, tensor_interp, u3%Orientation(:,:,node),  u_out%Orientation(:,:,node) !bjj: adding the "small rot angles" columns so I don't have to redo Matlab debugging code         
+               tensor_interp =   tensor(:,1) &
+                                 + ( t(3)**2 * (tensor(:,1) - tensor(:,2)) + t(2)**2*(-tensor(:,1) + tensor(:,3)) )*scaleFactor &
+                                 + ( (t(2)-t(3))*tensor(:,1) + t(3)*tensor(:,2) - t(2)*tensor(:,3) )*scaleFactor * t_out
+               u_out%Orientation(:,:,node) = DCM_exp( tensor_interp )  
 
-         END DO
- 
+            END DO
+         end if
+         
                                                 
       END IF
 
