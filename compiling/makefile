@@ -21,8 +21,9 @@ BITS = 32
 
 TurbSim_DIR  = ../Source
 
-NWTC_Lib_DIR = $(TurbSim_DIR)/dependencies/NWTC_Library
-NETLIB_DIR   = $(TurbSim_DIR)/dependencies/NetLib
+NWTC_Lib_DIR = $(TurbSim_DIR)/../NWTC_Library/source
+NETLIB_DIR   = $(NWTC_Lib_DIR)/NetLib/fftpack \
+               $(NWTC_Lib_DIR)/NetLib/lapack
 pRNG_DIR     = $(TurbSim_DIR)/dependencies/RNG
 
 BIN_DIR      = ../bin

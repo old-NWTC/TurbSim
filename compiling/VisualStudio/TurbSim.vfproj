@@ -29,23 +29,23 @@
 		<Filter Name="Source Files" Filter="f90;for;f;fpp;ftn;def;odl;idl">
 		<Filter Name="dependencies">
 		<Filter Name="NetLib">
-		<File RelativePath="..\..\Source\dependencies\NetLib\fftpack4.1.f">
+		<File RelativePath="..\..\NWTC_Library\source\NetLib\fftpack\fftpack4.1.f">
 			<FileConfiguration Name="Debug|Win32">
 				<Tool Name="VFFortranCompilerTool" StandardWarnings="standardWarningsNone"/></FileConfiguration>
 			<FileConfiguration Name="Release|Win32">
 				<Tool Name="VFFortranCompilerTool" StandardWarnings="standardWarningsNone"/></FileConfiguration></File>
-		<File RelativePath="..\..\Source\dependencies\NetLib\NWTC_FFTPACK.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NetLib\NWTC_LAPACK.f90"/></Filter>
+		<File RelativePath="..\..\NWTC_Library\source\NetLib\fftpack\NWTC_FFTPACK.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NetLib\lapack\NWTC_LAPACK.f90"/></Filter>
 		<Filter Name="NWTC_Library">
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\ModMesh.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\ModMesh_Types.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Base.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_IO.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Library.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Library_Types.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\NWTC_Num.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\SingPrec.f90"/>
-		<File RelativePath="..\..\Source\dependencies\NWTC_Library\SysIVF.f90"/></Filter>
+		<File RelativePath="..\..\NWTC_Library\source\ModMesh.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\ModMesh_Types.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NWTC_Base.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NWTC_IO.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NWTC_Library.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NWTC_Library_Types.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\NWTC_Num.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\SingPrec.f90"/>
+		<File RelativePath="..\..\NWTC_Library\source\SysIVF.f90"/></Filter>
 		<Filter Name="RanLux">
 		<File RelativePath="..\..\Source\dependencies\RNG\RANLUX.f90"/></Filter></Filter>
 		<Filter Name="TurbSim">
